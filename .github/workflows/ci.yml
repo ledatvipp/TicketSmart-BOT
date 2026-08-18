@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: file:./ci.db
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            src/web/package-lock.json
+
+      - name: Install API and bot dependencies
+        run: npm ci
+
+      - name: Install dashboard dependencies
+        run: npm --prefix src/web ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build dashboard
+        run: npm run build

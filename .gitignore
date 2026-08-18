@@ -1,0 +1,25 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+src/web/node_modules/
+
+# Builds and generated files
+src/web/dist/
+src/generated/client/
+
+# Runtime data
+prisma/*.db
+prisma/*.db-*
+uploads/
+logs/
+transcripts/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.log

@@ -1,0 +1,13 @@
+{
+  "name": "Ticket Hub",
+  "short_name": "Ticket Hub",
+  "description": "Discord ticket management dashboard",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0a0a0d",
+  "theme_color": "#7c5cff",
+  "icons": [
+    { "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Ctext y='160' font-size='160'%3E%F0%9F%8E%AB%3C/text%3E%3C/svg%3E", "sizes": "192x192", "type": "image/svg+xml" },
+    { "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Ctext y='420' font-size='420'%3E%F0%9F%8E%AB%3C/text%3E%3C/svg%3E", "sizes": "512x512", "type": "image/svg+xml" }
+  ]
+}

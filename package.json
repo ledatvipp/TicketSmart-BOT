@@ -1,0 +1,59 @@
+{
+  "name": "discord-smart-ticket-system",
+  "version": "7.3.3",
+  "description": "Multi-cluster Discord support command center with OpenRouter AI, SmartLearn quality gates, ticket intelligence and routing analytics",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n API,BOT,WEB -c cyan,yellow,magenta \"npm run dev:api\" \"npm run dev:bot\" \"npm run dev:web\"",
+    "dev:api": "node --watch src/api/index.js",
+    "dev:bot": "node --watch src/bot/index.js",
+    "dev:web": "npm --prefix src/web run dev",
+    "build": "npm --prefix src/web run build",
+    "start": "node index.js",
+    "start:api": "node src/api/index.js",
+    "start:bot": "node src/bot/index.js",
+    "db:push": "node scripts/refuse-db-push.js",
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "db:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:studio": "prisma studio --schema prisma/schema.prisma",
+    "setup-admin": "node scripts/setup-admin.js",
+    "seed:options": "node scripts/seed-options.js",
+    "test": "npm run test:unit && npm run test:migrations",
+    "check": "node scripts/check-syntax.js",
+    "verify": "npm run db:generate && npm run db:validate && npm run check && npm run security:scan && npm test && npm run build",
+    "install:all": "npm ci && npm --prefix src/web ci",
+    "seed:knowledge": "node scripts/seed-knowledge.js",
+    "seed:local-account": "node scripts/seed-local-account.js",
+    "setup": "npm run db:generate && npm run db:deploy && npm run seed:clusters && npm run seed:options && npm run seed:knowledge && npm run build",
+    "seed:clusters": "node scripts/seed-clusters.js",
+    "db:baseline-existing": "node scripts/baseline-existing-db.js",
+    "db:validate": "prisma validate --schema prisma/schema.prisma",
+    "test:unit": "node --test tests/*.test.js",
+    "test:migrations": "node --no-warnings scripts/check-migrations.js",
+    "security:scan": "node scripts/security-scan.js",
+    "db:push:dev": "node scripts/db-push-dev.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "express-rate-limit": "^7.5.1",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^3.3.2",
+    "prisma": "^5.10.0",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.18.0",
+    "npm": ">=9.0.0"
+  },
+  "packageManager": "npm@10.9.2"
+}

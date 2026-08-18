@@ -1,0 +1,800 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+
+model Cluster {
+  id                 String   @id @default(cuid())
+  key                String   @unique
+  name               String
+  emoji              String   @default("🗺️")
+  color              String   @default("#5865F2")
+  aliases            String   @default("")
+  description        String   @default("")
+  discordCategoryId  String?
+  supportChannelIds  String   @default("")
+  staffRoleIds       String   @default("")
+  isActive           Boolean  @default(true)
+  sortOrder          Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model Option {
+  id                String  @id @default(cuid())
+  name              String
+  emoji             String? @default("🗺️")
+  description       String?
+  color             String? @default("#5865F2")
+  discordCategoryId String?
+  welcomeMessage    String?
+  autoMessages      String? @default("[]")
+  isActive          Boolean @default(true)
+  sortOrder         Int     @default(0)
+  clusterKeys       String  @default("*") // CSV cluster keys hoặc *
+
+  // Custom ticket embed per option
+  customEmbedEnabled Boolean @default(false)
+  ticketTitle        String?
+  ticketDesc         String?
+  ticketGuidance     String?
+  ticketFooter       String?
+  ticketColor        String?
+
+  // ── Custom form fields (JSON array of FormField objects)
+  // FormField: { id, label, type: 'text'|'textarea'|'select'|'number'|'url'|'checkbox', required, placeholder, options? }
+  formFields        String  @default("[]")
+  inheritFormFromId String?
+
+  // ── Auto-actions per option (override global if not null)
+  autoCloseHours      Int? // tự đóng sau X giờ inactive
+  autoEscalateMinutes Int? // ping role + urgent nếu chưa claim sau X phút
+  slaResponseMinutes  Int? // SLA mục tiêu first response
+
+  // ── Permission: staff role được phép xem option này (CSV discord role IDs, trống = mọi staff)
+  allowedStaffRoles String @default("")
+
+  // ── Ping config: staff/roles được ping khi tạo ticket (CSV role/user IDs hoặc mentions)
+  pingStaff String @default("")
+
+  // ── Anti-spam: 1 user mở bao nhiêu ticket tối đa cùng lúc (0 = không giới hạn)
+  maxOpenPerUser Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tickets   Ticket[]
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model TicketCounter {
+  id        String   @id @default("global")
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model Ticket {
+  id            String    @id @default(cuid())
+  ticketNum     Int       @unique
+  creationKey   String?   @unique // idempotency key từ Discord interaction
+  optionId      String?
+  option        Option?   @relation(fields: [optionId], references: [id])
+  type          String
+  clusterKey    String?
+  creatorId     String
+  creatorName   String
+  creatorAvatar String?
+  claimerId     String?
+  claimerName   String?
+  status        String    @default("creating") // creating | open | claimed | closed | creation_failed
+  channelId     String?
+  priority      String    @default("normal")
+  note          String?
+  openedAt      DateTime  @default(now())
+  claimedAt     DateTime?
+  closedAt      DateTime?
+
+  // SLA / metrics
+  firstResponseAt DateTime?
+  lastMessageAt   DateTime?
+  messageCount    Int       @default(0)
+  slaBreachedAt   DateTime? // khi nào SLA bị breach (null = chưa breach hoặc đã ok)
+  closedBy        String? // discordId người đóng
+  closeReason     String?
+
+  // Ticket workflow + compact interactive panel (v6)
+  workflowStatus      String   @default("waiting_staff") // waiting_staff | waiting_user | ai_assisting | resolved
+  panelMessageId      String?
+  aiPanelMessageId    String?
+  aiPaused            Boolean  @default(false)
+  aiReplyCount        Int      @default(0)
+  aiLastIntent        String?
+  aiLastReplyAt       DateTime?
+  aiSummary           String?
+  // v7.3: structured AI triage + evidence tracking
+  aiTriage            String   @default("{}")
+  aiTriageConfidence  Float?
+  aiEvidenceScore     Float?
+  aiNeedsHuman        Boolean  @default(false)
+  aiMissingInfo       String   @default("[]")
+  aiLastTriageAt      DateTime?
+  lastUserMessageAt   DateTime?
+  lastStaffMessageAt  DateTime?
+  lastEscalatedAt     DateTime?
+
+  // Ticket routing / move history (v7.3.1)
+  moveCount           Int       @default(0)
+  lastMovedAt         DateTime?
+  lastMovedBy         String?
+
+  // Tags + watchers (CSV)
+  tags     String @default("")
+  watchers String @default("") // discordIds watcher
+
+  // Form data answers từ option form fields (JSON)
+  formData String @default("{}")
+
+  messages  Message[]
+  auditLogs AuditLog[]
+  rating    Rating?
+  moves     TicketMove[]
+
+  @@index([status])
+  @@index([type])
+  @@index([priority])
+  @@index([openedAt])
+  @@index([channelId])
+  @@index([creatorId])
+  @@index([claimerId])
+  @@index([slaBreachedAt])
+  @@index([workflowStatus])
+  @@index([aiNeedsHuman])
+  @@index([aiLastTriageAt])
+  @@index([clusterKey])
+  @@index([lastUserMessageAt])
+}
+
+model TicketMove {
+  id             String   @id @default(cuid())
+  ticketId       String
+  ticket         Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromOptionId   String?
+  fromOptionName String?
+  toOptionId     String
+  toOptionName   String
+  fromCategoryId String?
+  toCategoryId   String?
+  movedById      String
+  movedByName    String
+  reason         String?
+  source         String   @default("discord") // discord | dashboard | api
+  createdAt      DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([fromOptionId])
+  @@index([toOptionId])
+  @@index([movedById])
+  @@index([createdAt])
+}
+
+model Message {
+  id               String   @id @default(cuid())
+  ticketId         String
+  ticket           Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  discordMessageId String?  @unique
+  authorId         String
+  authorName       String
+  authorAvatar     String?
+  isBot            Boolean  @default(false)
+  isInternal       Boolean  @default(false) // internal thread message, không hiện cho user
+  content          String
+  attachments      String   @default("[]")
+  timestamp        DateTime
+
+  @@index([ticketId, timestamp])
+  @@index([authorId])
+  @@index([isInternal])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  ticketId  String?
+  ticket    Ticket?  @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  actorId   String
+  actorName String
+  actorKind String   @default("user")
+  action    String
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Staff {
+  id             String  @id @default(cuid())
+  discordId      String  @unique
+  username       String
+  avatar         String?
+  role           String  @default("MOD") // VIEWER | MOD | SENIOR | ADMIN
+  // ── Granular permissions (JSON object: { canClose, canReopen, canBulk, canConfig, canStaff, ... })
+  permissions    String  @default("{}")
+  // ── Per-option visibility: CSV optionIds, trống = mọi option
+  allowedOptions String  @default("")
+  // Legacy reserved fields. v7.2.2 security hardening disables and clears them;
+  // do not claim 2FA protection until a complete challenge flow is implemented.
+  totpSecret     String?
+  totpEnabled    Boolean @default(false)
+
+  localAccount LocalAccount?
+
+  addedAt   DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LocalAccount {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  staffId      String   @unique
+  staff        Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model CannedResponse {
+  id        String   @id @default(cuid())
+  shortcut  String   @unique
+  title     String
+  content   String
+  category  String   @default("")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  discordId String
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([discordId])
+  @@index([expiresAt])
+}
+
+// ── User feedback ratings sau khi close ─────────────────────────────────────
+model Rating {
+  id        String   @id @default(cuid())
+  ticketId  String   @unique
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  raterId   String // discordId user rate
+  score     Int // 1-5
+  comment   String?
+  staffId   String? // discordId staff được rate (claimerId tại thời điểm close)
+  staffName String?
+  createdAt DateTime @default(now())
+
+  @@index([staffId])
+  @@index([score])
+  @@index([createdAt])
+}
+
+// ── Auto-tag rules ─────────────────────────────────────────────────────────
+model AutoTagRule {
+  id        String   @id @default(cuid())
+  name      String
+  keywords  String // CSV: "refund,money back,refunding"
+  tag       String // tag to apply
+  enabled   Boolean  @default(true)
+  matchAll  Boolean  @default(false) // false = OR (any keyword match), true = AND (all)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ── FAQ entries ───────────────────────────────────────────────────────────
+model Faq {
+  id        String   @id @default(cuid())
+  title     String
+  keywords  String // CSV cho search
+  content   String // markdown
+  category  String   @default("")
+  views     Int      @default(0)
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled])
+}
+
+// ── Webhooks out (gửi POST đến URL khi có event) ─────────────────────────
+model Webhook {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  secret    String? // HMAC signing key
+  events    String // CSV: "ticket.create,ticket.close,..."
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt  DateTime          @updatedAt
+  deliveries WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id             String    @id @default(cuid())
+  webhookId      String
+  webhook        Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event          String
+  payload        String
+  status         String    @default("pending") // pending | processing | retry | delivered | dead
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now())
+  lockedAt       DateTime?
+  lastError      String?
+  responseStatus Int?
+  createdAt      DateTime  @default(now())
+  deliveredAt    DateTime?
+
+  @@index([status, nextAttemptAt])
+  @@index([webhookId, createdAt])
+}
+
+// ── User push subscriptions cho PWA ──────────────────────────────────────
+model PushSubscription {
+  id        String   @id @default(cuid())
+  discordId String
+  endpoint  String   @unique
+  keys      String // JSON: { p256dh, auth }
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([discordId])
+}
+
+// ── Rate limit cho ticket creation (anti-spam) ──────────────────────────
+model TicketCreationLock {
+  creatorId String   @id
+  touchedAt DateTime @updatedAt
+}
+
+model TicketCreateLog {
+  id        String   @id @default(cuid())
+  creatorId String
+  optionId  String?
+  clusterKey String?
+  createdAt DateTime @default(now())
+
+  @@index([creatorId, createdAt])
+}
+
+
+model SmartConversation {
+  id               String   @id @default(cuid())
+  guildId          String
+  channelId        String
+  userId           String
+  status           String   @default("active") // active | awaiting_clarification | closed
+  context          String   @default("{}")
+  pendingIntents   String   @default("[]")
+  lastIntentKey    String?
+  lastDetectionId  String?
+  clusterKey       String?
+  turnCount        Int      @default(0)
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  messages         SmartConversationMessage[]
+
+  @@unique([guildId, channelId, userId])
+  @@index([expiresAt])
+  @@index([userId, updatedAt])
+}
+
+model SmartConversationMessage {
+  id             String            @id @default(cuid())
+  conversationId String
+  conversation   SmartConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  intentKey      String?
+  metadata       String            @default("{}")
+  createdAt      DateTime          @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model IntentDetection {
+  id             String   @id @default(cuid())
+  guildId        String
+  channelId      String
+  messageId      String?  @unique
+  userId         String
+  content        String
+  intentKey      String
+  confidence     Float
+  source         String   // rule | ai | fallback
+  action         String
+  optionId       String?
+  clusterKey     String?
+  status         String   @default("detected")
+  latencyMs      Int      @default(0)
+  metadata       String   @default("{}")
+  createdAt      DateTime @default(now())
+  feedback       SmartFeedback?
+
+  @@index([guildId, createdAt])
+  @@index([intentKey, createdAt])
+  @@index([userId, createdAt])
+  @@index([clusterKey, createdAt])
+}
+
+model SmartFeedback {
+  id                String          @id @default(cuid())
+  detectionId       String          @unique
+  detection         IntentDetection @relation(fields: [detectionId], references: [id], onDelete: Cascade)
+  userId            String
+  helpful           Boolean?
+  correctedIntent   String?
+  note              String?
+  approvedForTraining Boolean       @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([approvedForTraining])
+}
+
+
+model KnowledgeArticle {
+  id                 String    @id @default(cuid())
+  slug               String    @unique
+  title              String
+  summary            String    @default("")
+  content            String
+  category           String    @default("")
+  clusterKeys        String    @default("*") // CSV cluster keys hoặc *
+  keywords           String    @default("")
+  actions            String    @default("[]")
+  enabled            Boolean   @default(true)
+  version            Int       @default(1)
+  sourceLabel        String    @default("IS7MC Knowledge Base")
+  sourceUrl          String?
+  status             String    @default("PUBLISHED") // DRAFT | PUBLISHED | REVIEW_REQUIRED | EXPIRED | ARCHIVED
+  visibility         String    @default("PUBLIC") // PUBLIC | STAFF_ONLY | INTERNAL
+  pinned             Boolean   @default(false)
+  expiresAt          DateTime?
+  reviewDueAt        DateTime?
+  lastReviewedAt     DateTime?
+  lastReviewedBy     String?
+  qualityScore       Float     @default(1.0)
+  confidenceFloor    Float     @default(0.3)
+  embedding          String?
+  embeddingModel     String?
+  embeddingHash      String?
+  embeddingUpdatedAt DateTime?
+  views              Int       @default(0)
+  helpfulCount       Int       @default(0)
+  unhelpfulCount     Int       @default(0)
+  createdBy          String?
+  updatedBy          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  revisions          KnowledgeRevision[]
+  aliases            KnowledgeAlias[]
+  approvedCandidates KnowledgeCandidate[] @relation("CandidateArticle")
+  targetCandidates   KnowledgeCandidate[] @relation("CandidateTargetArticle")
+
+  @@index([enabled, category])
+  @@index([status, enabled])
+  @@index([expiresAt])
+  @@index([reviewDueAt])
+  @@index([pinned, updatedAt])
+  @@index([clusterKeys])
+  @@index([updatedAt])
+}
+
+model KnowledgeRevision {
+  id        String           @id @default(cuid())
+  articleId String
+  article   KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  version   Int
+  snapshot  String
+  actorId   String?
+  actorName String?
+  createdAt DateTime         @default(now())
+
+  @@index([articleId, version])
+}
+
+
+model KnowledgeAlias {
+  id                String           @id @default(cuid())
+  articleId         String
+  article           KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  phrase            String
+  normalized        String
+  weight            Float            @default(1.0)
+  sourceCandidateId String?
+  createdAt         DateTime         @default(now())
+
+  @@unique([articleId, normalized])
+  @@index([normalized])
+  @@index([sourceCandidateId])
+}
+
+model KnowledgeCandidate {
+  id                 String   @id @default(cuid())
+  dedupeKey          String   @unique
+  guildId            String
+  clusterKey         String?
+  intentKey          String?
+  question           String
+  normalizedQuestion String
+  questionHash       String
+  proposedTitle      String?
+  proposedAnswer     String?
+  proposedKeywords   String   @default("")
+  sourceType         String   @default("SMART_MESSAGE")
+  sourceTicketId     String?
+  sourceChannelId    String?
+  sourceMessageId    String?
+  sourceUserId       String?
+  sourceUserName     String?
+  sourceExamples     String   @default("[]")
+  status             String   @default("PENDING") // PENDING | NEEDS_ADMIN | CONFLICTED | PUBLISHING | APPROVED | REJECTED
+  riskLevel          String   @default("NORMAL") // NORMAL | ADMIN_REQUIRED
+  candidateType      String   @default("NEW_ARTICLE") // NEW_ARTICLE | ADD_ALIAS | REVISE_ARTICLE | VERIFY_EXISTING
+  targetArticleId    String?
+  targetArticle      KnowledgeArticle? @relation("CandidateTargetArticle", fields: [targetArticleId], references: [id], onDelete: SetNull)
+  matchScore         Float    @default(0)
+  priorityScore      Float    @default(0)
+  // v7.3: chất lượng tín hiệu học, diversity và conflict detection
+  learningScore      Float    @default(0)
+  evidenceScore      Float    @default(0)
+  sourceDiversity    Int      @default(1)
+  conflictScore      Float    @default(0)
+  negativeSignalCount Int     @default(0)
+  lastSeenAt         DateTime?
+  resolutionNote     String?
+  occurrenceCount    Int      @default(1)
+  approvalCount      Int      @default(0)
+  rejectionCount     Int      @default(0)
+  deliveryRefs       String   @default("[]")
+  approvedArticleId  String?
+  approvedArticle    KnowledgeArticle? @relation("CandidateArticle", fields: [approvedArticleId], references: [id], onDelete: SetNull)
+  reviewedAt         DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  reviews            KnowledgeReview[]
+
+  @@index([guildId, status, createdAt])
+  @@index([clusterKey, status])
+  @@index([intentKey, status])
+  @@index([questionHash])
+  @@index([sourceTicketId])
+  @@index([targetArticleId, status])
+  @@index([priorityScore, updatedAt])
+  @@index([learningScore, updatedAt])
+  @@index([lastSeenAt])
+}
+
+model KnowledgeReview {
+  id           String             @id @default(cuid())
+  candidateId  String
+  candidate    KnowledgeCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  reviewerId   String
+  reviewerName String
+  reviewerKind String             @default("STAFF")
+  action       String // APPROVE | REJECT | ALTERNATIVE
+  answer       String?
+  reason       String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([candidateId, reviewerId])
+  @@index([candidateId, action])
+  @@index([reviewerId, createdAt])
+}
+
+model ActionExecution {
+  id          String   @id @default(cuid())
+  detectionId String?
+  actionName  String
+  userId      String
+  guildId     String?
+  channelId   String?
+  clusterKey String?
+  status      String   @default("started")
+  input       String   @default("{}")
+  result      String   @default("{}")
+  error       String?
+  latencyMs   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actionName, status])
+  @@index([detectionId])
+  @@index([userId])
+  @@index([clusterKey, createdAt])
+}
+
+model GuildConfig {
+  id             String  @id @default(cuid())
+  guildId        String  @unique
+  embedChannelId String?
+  logChannelId   String?
+  staffRoleId    String?
+
+  // Setup embed
+  embedTitle        String  @default("🎮 Hệ Thống Hỗ Trợ Ticket")
+  embedDesc         String  @default("Chọn loại hỗ trợ bên dưới để tạo ticket.")
+  embedColor        String  @default("#5865F2")
+  embedThumbnail    String?
+  embedImage        String?
+  embedFooter       String  @default("🎮 Game Server Support System")
+  embedAuthorIcon   String?
+  embedFooterIcon   String?
+  selectPlaceholder String  @default("📋 Chọn loại hỗ trợ...")
+
+  // Ticket embed
+  ticketTitle       String  @default("🎫 Ticket #{ticketNum}")
+  ticketDesc        String  @default("Xin chào {user}! Ticket của bạn đã được tạo thành công.")
+  ticketGuidance    String  @default("• Mô tả vấn đề chi tiết\n• Kèm ảnh/video nếu có")
+  ticketFooter      String  @default("ID: {ticketNum} • Hệ thống Ticket")
+  ticketColor       String  @default("#5865F2")
+  ticketShowType    Boolean @default(true)
+  ticketShowCreator Boolean @default(true)
+  ticketShowTime    Boolean @default(true)
+  ticketShowGuide   Boolean @default(true)
+
+  // Behavior
+  deleteSetupMessages Boolean @default(true)
+  dmOnTicketCreate    Boolean @default(true)
+  dmMessage           String  @default("✅ Ticket **#{ticketNum}** của bạn đã được tạo!\nVào {channel} để xem.")
+  dmOnTicketClose     Boolean @default(true)
+  ratingDmEnabled     Boolean @default(true)
+
+  // SLA targets per priority (phút)
+  slaUrgentMinutes Int @default(15)
+  slaHighMinutes   Int @default(60)
+  slaNormalMinutes Int @default(240)
+
+  // Auto-action defaults (override per-option)
+  defaultAutoCloseHours      Int @default(0) // 0 = tắt
+  defaultAutoEscalateMinutes Int @default(0) // 0 = tắt
+
+  // Anti-spam global
+  globalMaxOpenPerUser  Int @default(3)
+  ticketCooldownSeconds Int @default(60) // tối thiểu giữa 2 lần tạo
+
+  // AI provider (v7.3.2) — OpenRouter is the default real-AI backend.
+  // API key is stored separately in AiProviderCredential and is never returned by config APIs.
+  aiProvider                  String  @default("openrouter")
+  openRouterModel             String  @default("google/gemma-4-26b-a4b-it:free")
+  openRouterAnswerModel       String  @default("")
+  openRouterTriageModel       String  @default("")
+  openRouterEmbeddingModel    String  @default("openai/text-embedding-3-small")
+  openRouterReasoningEnabled  Boolean @default(true)
+  openRouterReasoningEffort   String  @default("low") // minimal | low | medium | high
+
+  // Smart Assistant: Rule Engine + AI Intent Router
+  smartSupportEnabled    Boolean @default(false)
+  smartSupportChannelIds String  @default("") // CSV channel IDs; trống = chỉ phản hồi khi bot được mention
+  smartMentionOnly       Boolean @default(false)
+  smartCooldownSeconds   Int     @default(15)
+  smartRuleThreshold     Float   @default(0.72)
+  smartAiThreshold       Float   @default(0.82)
+  smartAiEnabled         Boolean @default(false)
+  smartKnowledgeEnabled Boolean @default(true)
+  smartKnowledgeAiEnabled Boolean @default(false)
+  smartKnowledgeThreshold Float @default(0.3)
+  smartKnowledgeMaxResults Int @default(3)
+  smartAnswerMaxChars Int @default(1800)
+  // v7.3: evidence-aware RAG
+  smartEvidenceMinScore      Float @default(0.50)
+  smartEvidenceMinTopGap     Float @default(0.04)
+  smartKnowledgeFreshnessDays Int @default(180)
+  smartEscalationRoleId String?
+  smartEscalationChannelId String?
+  smartRequireCluster       Boolean @default(true)
+  smartDefaultClusterKey    String?
+  smartClusterChannelMap    String  @default("{}") // JSON channelId->clusterKey hoặc clusterKey->[channelIds]
+
+
+  // Smart Assistant v5: hội thoại, multi-intent và độ ổn định
+  smartConversationEnabled      Boolean @default(true)
+  smartConversationTtlMinutes   Int     @default(15)
+  smartMaxContextMessages       Int     @default(6)
+  smartClarificationEnabled     Boolean @default(true)
+  smartClarificationThreshold   Float   @default(0.62)
+  smartMultiIntentEnabled       Boolean @default(true)
+  smartMaxIntents               Int     @default(2)
+  smartFuzzyMatchingEnabled     Boolean @default(true)
+  smartResponseCacheSeconds     Int     @default(300)
+  smartAiRetryCount             Int     @default(2)
+  smartBurstLimitPerMinute      Int     @default(8)
+
+  // Smart AI bên trong ticket (v6)
+  ticketCompactMode                Boolean @default(true)
+  ticketAiEnabled                  Boolean @default(true)
+  ticketAiMode                     String  @default("balanced") // off | passive | balanced | active
+  ticketAiOnlyCreator              Boolean @default(true)
+  ticketAiRequireQuestion          Boolean @default(true)
+  ticketAiPauseWhenClaimed         Boolean @default(true)
+  ticketAiSensitiveEscalation      Boolean @default(true)
+  ticketAiPanelMode                Boolean @default(true)
+  ticketAiAutoSummary              Boolean @default(true)
+  ticketAiReplyCooldownSeconds     Int     @default(45)
+  ticketAiMaxReplies               Int     @default(3)
+  ticketAiMinConfidence            Float   @default(0.78)
+  ticketAiMaxAnswerChars           Int     @default(650)
+  // v7.3: ticket memory + structured triage
+  ticketAiContextMessages          Int     @default(8)
+  ticketAiTriageEnabled            Boolean @default(true)
+  ticketAiTriageMinConfidence      Float   @default(0.75)
+  ticketAiAutoPriority             Boolean @default(true)
+  ticketAiAutoTags                 Boolean @default(true)
+  ticketAiAutoEscalateSensitive    Boolean @default(false)
+  ticketRequireCluster             Boolean @default(true)
+  ticketClusterSelectEnabled       Boolean @default(true)
+
+  // SmartLearn: human verified knowledge loop
+  smartLearnEnabled                 Boolean @default(false)
+  smartLearnReviewChannelId         String?
+  smartLearnReviewerRoleIds         String  @default("")
+  smartLearnAdminRoleIds            String  @default("")
+  smartLearnDeliveryMode            String  @default("channel") // channel | dm | both
+  smartLearnMaxDmReviewers          Int     @default(10)
+  smartLearnCandidateConfidence     Float   @default(0.70)
+  smartLearnDuplicateThreshold      Float   @default(0.82)
+  smartLearnStaffVotesRequired      Int     @default(2)
+  smartLearnAdminVotesRequired      Int     @default(1)
+  smartLearnMaxCandidatesPerHour    Int     @default(30)
+  smartLearnNotifyUser              Boolean @default(true)
+  smartLearnCreateFromNegativeVote  Boolean @default(true)
+  // v7.3: learning quality gates + resolved ticket learning
+  smartLearnFromResolvedTickets     Boolean @default(true)
+  smartLearnMinLearningScore        Float   @default(0.45)
+  smartLearnMinSourceDiversity      Int     @default(1)
+  smartLearnConflictThreshold       Float   @default(0.70)
+  smartLearnReviewIntervalDays      Int     @default(90)
+}
+
+// ── Generated banners gallery ──────────────────────────────────────────────
+model GeneratedBanner {
+  id        String   @id @default(cuid())
+  name      String
+  imageUrl  String
+  config    String   @default("{}") // Store JSON string of the banner config
+  createdAt DateTime @default(now())
+}
+
+// v7.3.2: encrypted provider credentials. Keep secrets out of GuildConfig API payloads.
+model AiProviderCredential {
+  id               String   @id @default(cuid())
+  guildId          String
+  provider         String
+  apiKeyCiphertext String
+  keyHint          String   @default("")
+  keyFingerprint   String   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  lastTestedAt     DateTime?
+  lastTestStatus   String?
+
+  @@unique([guildId, provider])
+  @@index([guildId])
+}

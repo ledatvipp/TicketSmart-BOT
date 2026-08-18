@@ -1,0 +1,9 @@
+Discord Smart Ticket System v7.3.3
+Feature: OpenRouter AI Playground + free-model failover + runtime diagnostics
+Build date: 2026-08-09
+Database migration delta from v7.3.2: none
+JavaScript/Vue syntax: run `npm run check`
+Node tests: run `npm run test:unit`
+Migration replay: run `npm run test:migrations`
+Security scan: run `npm run security:scan`
+Dashboard build: run `npm run build` after installing dependencies
