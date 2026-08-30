@@ -13,6 +13,7 @@ const SECRET = process.env.BOT_API_SECRET;
 const HEADERS = SECRET ? { 'X-Bot-Secret': SECRET } : {};
 
 let timer = null;
+let initialTimer = null;
 let running = false;
 
 async function tick(client) {
@@ -25,11 +26,15 @@ async function tick(client) {
     // Gọi API endpoint xử lý logic (xem autoActionsController)
     const { data } = await axios.post(`${API_URL}/api/auto-actions/run`, {}, {
       headers: HEADERS, timeout: 20000,
-    }).catch((e) => ({ data: { actions: [], error: e.message } }));
+    });
 
-    if (data?.actions?.length) {
-      logger.info(`[AutoActions] xử lý ${data.actions.length} action(s)`);
-      for (const action of data.actions) {
+    const actions = data?.data?.actions;
+    if (data?.success !== true || !Array.isArray(actions)) {
+      throw new Error('API auto-actions trả về dữ liệu không hợp lệ');
+    }
+    if (actions.length) {
+      logger.info(`[AutoActions] xử lý ${actions.length} action(s)`);
+      for (const action of actions) {
         await executeAction(client, action, cfg);
       }
     }
@@ -91,13 +96,17 @@ async function executeAction(client, action, cfg) {
 }
 
 export function startScheduler(client, intervalMs = 60_000) {
-  if (timer) clearInterval(timer);
+  stopScheduler();
   timer = setInterval(() => tick(client), intervalMs);
   logger.info(`✅ Auto-actions scheduler started (every ${intervalMs}ms)`);
   // Chạy lần đầu sau 10s để bot wake up xong
-  setTimeout(() => tick(client), 10_000);
+  initialTimer = setTimeout(() => {
+    initialTimer = null;
+    tick(client);
+  }, 10_000);
 }
 
 export function stopScheduler() {
   if (timer) { clearInterval(timer); timer = null; }
+  if (initialTimer) { clearTimeout(initialTimer); initialTimer = null; }
 }

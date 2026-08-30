@@ -38,6 +38,7 @@ import intelligenceRouter from './routes/intelligence.js';
 import knowledgeRouter from './routes/knowledge.js';
 import clustersRouter from './routes/clusters.js';
 import smartLearnRouter from './routes/smartLearn.js';
+import chatLevelsRouter from './routes/chatLevels.js';
 
 try {
   validateEnv('api');
@@ -69,7 +70,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Authorization', 'Content-Type', 'X-Bot-Secret', 'X-Bot-Actor', 'X-Request-Id', 'X-Requested-With'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'X-Bot-Secret', 'X-Bot-Actor', 'X-Request-Id', 'X-Requested-With', 'X-LeDat-Server', 'X-LeDat-Timestamp', 'X-LeDat-Nonce', 'X-LeDat-Content-SHA256', 'X-LeDat-Signature'],
   maxAge: 600,
 }));
 app.use(createOriginGuard(WEB_ORIGIN));
@@ -80,7 +81,12 @@ const uploadJson = express.json({ limit: process.env.UPLOAD_JSON_LIMIT || '8mb',
 app.use('/api/banners', uploadJson);
 app.use('/api/config/setup-message', uploadJson);
 app.use('/api/config/announcement', uploadJson);
-app.use(express.json({ limit: process.env.API_JSON_LIMIT || '1mb', strict: true }));
+app.use(express.json({
+  limit: process.env.API_JSON_LIMIT || '1mb',
+  strict: true,
+  // The LobbySign signer hashes the exact UTF-8 payload, before JSON parsing.
+  verify(req, _res, buffer) { if (req.path.startsWith('/api/chat-levels/minecraft/')) req.rawBody = buffer.toString('utf8'); },
+}));
 app.use(express.urlencoded({ limit: '128kb', extended: false, parameterLimit: 100 }));
 
 app.use((req, res, next) => {
@@ -140,6 +146,7 @@ app.use('/api/intelligence', intelligenceRouter);
 app.use('/api/knowledge', knowledgeRouter);
 app.use('/api/clusters', clustersRouter);
 app.use('/api/smartlearn', smartLearnRouter);
+app.use('/api/chat-levels', chatLevelsRouter);
 
 const UPLOAD_ROOT = join(__dirname, '../../uploads');
 const PUBLIC_IMAGE_PATH = /\.(?:png|jpe?g|gif|webp)$/i;

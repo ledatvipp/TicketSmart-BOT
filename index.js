@@ -47,7 +47,7 @@ function scheduleRestart(name, relativeFile, runtimeMs, exitCode) {
     restartTimers.delete(name);
     if (!shuttingDown) startProcess(name, relativeFile);
   }, delay);
-  timer.unref();
+  // Pending restarts must keep the supervisor alive even when both children exit.
   restartTimers.set(name, timer);
 }
 

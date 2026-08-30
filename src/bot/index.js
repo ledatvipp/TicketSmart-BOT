@@ -9,6 +9,7 @@ import { readdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import logger from './utils/logger.js';
+import { createEventHandler, loadCommandModules, logRuntimeError } from './utils/runtime.js';
 import { validateEnv } from '../lib/env.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,33 +50,10 @@ client.commands = new Collection();
 // ========================
 async function loadCommands() {
   const commandsPath = join(__dirname, 'commands');
-
-  try {
-    const commandFiles = await readdir(commandsPath);
-    const jsFiles = commandFiles.filter((f) => f.endsWith('.js'));
-
-    logger.info(`Đang tải ${jsFiles.length} command(s)...`);
-
-    for (const file of jsFiles) {
-      const filePath = join(commandsPath, file);
-      const fileUrl = pathToFileURL(filePath).href;
-
-      const command = await import(fileUrl);
-
-      if (!command.data || !command.execute) {
-        logger.warn(`Command file ${file} thiếu 'data' hoặc 'execute'`);
-        continue;
-      }
-
-      client.commands.set(command.data.name, command);
-      logger.info(`  ✓ Command: /${command.data.name}`);
-    }
-
-    logger.success('Tất cả commands đã được tải!');
-  } catch (error) {
-    logger.error('Lỗi khi tải commands:', error.message);
-    // Không throw — commands thiếu sẽ chỉ báo warn
-  }
+  const commands = await loadCommandModules(commandsPath);
+  client.commands = new Collection(commands);
+  for (const name of commands.keys()) logger.info(`  ✓ Command: /${name}`);
+  logger.success('Tất cả commands đã được tải!');
 }
 
 // ========================
@@ -96,17 +74,17 @@ async function loadEvents() {
 
       const event = await import(fileUrl);
 
-      if (!event.name || !event.execute) {
-        logger.warn(`Event file ${file} thiếu 'name' hoặc 'execute'`);
-        continue;
+      if (!event.name || typeof event.execute !== 'function') {
+        throw new Error(`Event file ${file} thiếu 'name' hoặc 'execute'`);
       }
 
+      const handler = createEventHandler(event, logger);
       if (event.once) {
         // Chạy 1 lần
-        client.once(event.name, (...args) => event.execute(...args));
+        client.once(event.name, handler);
       } else {
         // Chạy mỗi khi event xảy ra
-        client.on(event.name, (...args) => event.execute(...args));
+        client.on(event.name, handler);
       }
 
       logger.info(`  ✓ Event: ${event.name} (${event.once ? 'once' : 'on'})`);
@@ -114,7 +92,7 @@ async function loadEvents() {
 
     logger.success('Tất cả events đã được tải!');
   } catch (error) {
-    logger.error('Lỗi khi tải events:', error.message);
+    logRuntimeError(logger, 'Lỗi khi tải events:', error);
     throw error;
   }
 }
@@ -123,17 +101,11 @@ async function loadEvents() {
 // Xử lý lỗi không bắt được
 // ========================
 process.on('unhandledRejection', (error) => {
-  logger.error('Unhandled Promise Rejection:', error.message);
-  if (error.stack) {
-    logger.debug(error.stack);
-  }
+  logRuntimeError(logger, 'Unhandled Promise Rejection:', error);
 });
 
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error.message);
-  if (error.stack) {
-    logger.debug(error.stack);
-  }
+  logRuntimeError(logger, 'Uncaught Exception:', error);
   setTimeout(() => process.exit(1), 250).unref();
 });
 
@@ -169,9 +141,9 @@ async function start() {
     logger.info('Đang kết nối với Discord...');
     await client.login(process.env.BOT_TOKEN);
   } catch (error) {
-    logger.error('Lỗi khi khởi động bot:', error.message);
+    logRuntimeError(logger, 'Lỗi khi khởi động bot:', error);
 
-    if (error.code === 'TokenInvalid') {
+    if (error?.code === 'TokenInvalid') {
       logger.error('BOT_TOKEN không hợp lệ! Kiểm tra lại trong .env');
     }
 

@@ -9,6 +9,7 @@ import { decodeImageDataUrl, publicAssetUrl, saveImmutableImage } from '../../li
 import { ValidationError, cleanDiscordId, cleanHttpUrl, cleanString } from '../security/validation.js';
 import { getAiProviderStatus, validateOpenRouterModel } from '../../intelligence/aiProvider.js';
 import { mergeClusters } from '../../clusters/clusterCatalog.js';
+import { DEFAULT_CHAT_LEVEL_CONFIG, parseChatLevelConfig, serializeChatLevelConfig } from '../../services/chatLevelService.js';
 
 const CONFIG_UPLOADS_DIR = join(process.cwd(), 'uploads/config');
 const CONFIG_MEDIA_FIELDS = ['embedThumbnail', 'embedImage', 'embedAuthorIcon', 'embedFooterIcon'];
@@ -131,9 +132,15 @@ const DEFAULT_CONFIG = {
   smartLearnMinSourceDiversity: 1,
   smartLearnConflictThreshold: 0.70,
   smartLearnReviewIntervalDays: 90,
+  chatLevelConfig: JSON.stringify(DEFAULT_CHAT_LEVEL_CONFIG),
 };
 
+function publicConfig(config) {
+  return { ...config, chatLevelConfig: parseChatLevelConfig(config.chatLevelConfig) };
+}
+
 function normalizeSmartConfig(data) {
+  if (data.chatLevelConfig !== undefined) data.chatLevelConfig = serializeChatLevelConfig(data.chatLevelConfig);
   if (data.aiProvider !== undefined) {
     if (String(data.aiProvider || '').trim() !== 'openrouter') throw new ValidationError('Hiện tại AI provider chỉ hỗ trợ OpenRouter');
     data.aiProvider = 'openrouter';
@@ -527,7 +534,7 @@ export const getConfig = async (req, res) => {
       config = await prisma.guildConfig.create({ data: { guildId, ...DEFAULT_CONFIG } });
     }
     const providerStatus = await getAiProviderStatus(config);
-    res.json({ success: true, data: { ...config, ...providerStatus } });
+    res.json({ success: true, data: { ...publicConfig(config), ...providerStatus } });
   } catch (err) {
     console.error('[GET CONFIG ERROR]', err);
     res.status(500).json({ success: false, message: 'Lỗi lấy cấu hình' });
@@ -571,6 +578,7 @@ export const updateConfig = async (req, res) => {
       'smartLearnMaxCandidatesPerHour', 'smartLearnNotifyUser', 'smartLearnCreateFromNegativeVote',
       'smartLearnFromResolvedTickets', 'smartLearnMinLearningScore', 'smartLearnMinSourceDiversity',
       'smartLearnConflictThreshold', 'smartLearnReviewIntervalDays',
+      'chatLevelConfig',
     ];
     const updateData = {};
     for (const key of allowed) if (req.body[key] !== undefined) updateData[key] = req.body[key];
@@ -596,7 +604,7 @@ export const updateConfig = async (req, res) => {
     emit('config:updated', config);
 
     const providerStatus = await getAiProviderStatus(config);
-    res.json({ success: true, data: { ...config, ...providerStatus } });
+    res.json({ success: true, data: { ...publicConfig(config), ...providerStatus } });
   } catch (err) {
     console.error('[UPDATE CONFIG ERROR]', err);
     if (err instanceof ValidationError) return res.status(err.statusCode || 400).json({ success: false, message: err.message, code: err.code });
@@ -641,6 +649,7 @@ export const publishSetupMessage = async (req, res) => {
       'smartLearnMaxCandidatesPerHour', 'smartLearnNotifyUser', 'smartLearnCreateFromNegativeVote',
       'smartLearnFromResolvedTickets', 'smartLearnMinLearningScore', 'smartLearnMinSourceDiversity',
       'smartLearnConflictThreshold', 'smartLearnReviewIntervalDays',
+      'chatLevelConfig',
       ];
       const updateData = {};
       for (const key of allowed) if (req.body[key] !== undefined) updateData[key] = req.body[key];

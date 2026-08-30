@@ -771,6 +771,76 @@ model GuildConfig {
   smartLearnMinSourceDiversity      Int     @default(1)
   smartLearnConflictThreshold       Float   @default(0.70)
   smartLearnReviewIntervalDays      Int     @default(90)
+
+  // Level Chat v1. JSON is deliberately configuration-only: Minecraft secrets stay in env.
+  chatLevelConfig String @default("{\"version\":1,\"enabled\":false,\"requiredVerifiedRoleIds\":[\"1543196526946291783\"],\"allowedChannelIds\":[],\"xpPerMessage\":20,\"minContentLength\":10,\"cooldownSeconds\":60,\"similarityWindow\":10,\"similarityThreshold\":0.9,\"levelRoles\":[],\"rewardSpins\":1,\"rewardMilestones\":[],\"minecraftServiceId\":\"default\",\"maxRewardAttempts\":12,\"rewardRetryBaseSeconds\":60,\"announcementEnabled\":true,\"announcementChannelId\":null,\"adminRoleIds\":[]}")
+}
+
+// Persistent per-guild Discord chat progress. `experience` is progress toward the
+// next level; levels start at zero so level 1 requires the documented 100 EXP.
+model ChatLevelProfile {
+  id            String   @id @default(cuid())
+  guildId       String
+  userId        String
+  level         Int      @default(0)
+  experience    Int      @default(0)
+  totalExperience Int    @default(0)
+  lastAwardedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([guildId, userId])
+  @@index([guildId, level, totalExperience])
+}
+
+// Idempotency ledger and recent normalized content for anti-farm checks.
+model ChatLevelMessage {
+  id                String   @id @default(cuid())
+  guildId           String
+  userId            String
+  messageId         String
+  normalizedContent String
+  awardedExperience Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  @@unique([guildId, messageId])
+  @@index([guildId, userId, createdAt])
+}
+
+// Durable Minecraft reward outbox. A level can create at most one grant.
+model ChatLevelRewardGrant {
+  id                String   @id @default(cuid())
+  guildId           String
+  userId            String
+  level             Int
+  spins             Int
+  // Snapshot the delivery worker and retry policy at the time the level is earned.
+  minecraftServiceId String  @default("default")
+  maxAttempts       Int      @default(12)
+  retryBaseSeconds  Int      @default(60)
+  status            String   @default("PENDING") // PENDING | LEASED | DEFERRED | COMPLETED | FAILED
+  leaseToken        String?
+  leaseExpiresAt    DateTime?
+  nextAttemptAt     DateTime @default(now())
+  attemptCount      Int      @default(0)
+  deliveryReference String?
+  lastError         String?
+  completedAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([guildId, userId, level])
+  @@index([status, nextAttemptAt])
+  @@index([minecraftServiceId, status, nextAttemptAt])
+  @@index([guildId, userId, createdAt])
+}
+
+// Non-secret heartbeat written only after a valid Minecraft HMAC request.
+model MinecraftLevelServiceStatus {
+  serverId   String   @id
+  lastSeenAt DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 // ── Generated banners gallery ──────────────────────────────────────────────

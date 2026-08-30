@@ -24,17 +24,39 @@ const apiClient = axios.create({
 let configCache = null;
 let configLastFetch = 0;
 const CONFIG_TTL = 5 * 60 * 1000;
+const CONFIG_RETRY_DELAY = 5_000;
+let configInFlight = null;
+let configGeneration = 0;
+let configRetryAfter = 0;
+let configLastError = null;
 
 export async function loadConfig() {
-  try {
-    const response = await apiClient.get('/api/config');
-    configCache = response.data;
-    configLastFetch = Date.now();
-    return configCache;
-  } catch (error) {
-    logger.error('Lỗi tải config:', error.message);
-    throw error;
-  }
+  if (configInFlight) return configInFlight;
+  if (configLastError && Date.now() < configRetryAfter) throw configLastError;
+
+  const generation = configGeneration;
+  configInFlight = (async () => {
+    try {
+      const response = await apiClient.get('/api/config');
+      // An invalidated request must not publish or return an outdated config.
+      if (generation !== configGeneration) return getConfig();
+      configCache = response.data;
+      configLastFetch = Date.now();
+      configLastError = null;
+      configRetryAfter = 0;
+      return configCache;
+    } catch (error) {
+      if (generation !== configGeneration) return getConfig();
+      configLastError = error;
+      configRetryAfter = Date.now() + CONFIG_RETRY_DELAY;
+      logger.error('Lỗi tải config:', error.message);
+      if (configCache) logger.warn('Đang dùng config cache cũ do lỗi API');
+      throw error;
+    } finally {
+      if (generation === configGeneration) configInFlight = null;
+    }
+  })();
+  return configInFlight;
 }
 
 export async function getConfig() {
@@ -44,7 +66,6 @@ export async function getConfig() {
     return await loadConfig();
   } catch (error) {
     if (configCache) {
-      logger.warn('Đang dùng config cache cũ do lỗi API');
       return configCache;
     }
     throw error;
@@ -52,8 +73,35 @@ export async function getConfig() {
 }
 
 export function clearConfigCache() {
+  configGeneration++;
+  configInFlight = null;
   configCache = null;
   configLastFetch = 0;
+  configLastError = null;
+  configRetryAfter = 0;
+}
+
+// ========================
+// Chat levels
+// ========================
+export async function getChatLevelProfile(userId) {
+  const response = await apiClient.get(`/api/chat-levels/profiles/${encodeURIComponent(userId)}`);
+  return response.data.data;
+}
+
+export async function getChatLeaderboard(limit = 10) {
+  const response = await apiClient.get('/api/chat-levels/leaderboard', { params: { limit } });
+  return response.data.data || [];
+}
+
+export async function retryChatRewardGrant(grantId) {
+  const response = await apiClient.post(`/api/chat-levels/grants/${encodeURIComponent(grantId)}/retry`);
+  return response.data;
+}
+
+export async function getChatRewardGrants(userId, limit = 20) {
+  const response = await apiClient.get('/api/chat-levels/grants', { params: { userId, limit } });
+  return response.data.data || [];
 }
 
 // ========================
