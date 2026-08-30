@@ -1,0 +1,44 @@
+{
+  "executedAt": "2026-08-30T04:05:42.945Z",
+  "origin": "http://127.0.0.1:5191",
+  "results": [
+    {
+      "name": "initial-levels-load",
+      "status": "PASS"
+    },
+    {
+      "name": "form-json-roundtrip-and-save",
+      "status": "PASS"
+    },
+    {
+      "name": "invalid-json-and-save-failure-preserve-draft",
+      "status": "PASS"
+    },
+    {
+      "name": "failed-config-save-lock",
+      "status": "PASS"
+    },
+    {
+      "name": "malformed-config-save-lock",
+      "status": "PASS"
+    },
+    {
+      "name": "operational-refresh-preserves-draft-and-retry-truth",
+      "status": "PASS"
+    },
+    {
+      "name": "unsaved-navigation-and-reload-confirmation",
+      "status": "PASS"
+    },
+    {
+      "name": "command-palette-keyboard-navigation",
+      "status": "PASS"
+    },
+    {
+      "name": "mobile-layout-menu-and-themes",
+      "status": "PASS"
+    }
+  ],
+  "isolation": "Actual Vue/Vite app; test-only auth/config/operations fixtures; fresh browser profiles; sockets and external hosts blocked.",
+  "limitations": "Chromium only; fixture-backed UI checks do not verify live OAuth, database, Discord, Minecraft or external font availability."
+}

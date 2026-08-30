@@ -2,11 +2,22 @@
 
 Hệ thống ticket Discord chuyên nghiệp theo hướng interaction-first: panel gọn, menu/button/modal, trợ lý AI an toàn ngay trong ticket, dashboard quản trị, Rule Engine tiếng Việt, Knowledge Base lai, Action Engine có kiểm soát và router tách biệt dữ liệu theo từng cụm máy chủ.
 
+Level Chat và reward Minecraft có thể bật theo guild bằng Dashboard. XP chỉ tính cho tin nhắn hợp lệ đáp ứng điều kiện role verify đã cấu hình; reward được đưa vào outbox có lease/idempotency để LobbySign xử lý an toàn. Xem [tài liệu Level Chat + Minecraft](docs/LEVEL_CHAT_MINECRAFT.md) để cấu hình JSON và chữ ký worker.
+
 Ví dụ người chơi gửi:
 
 > Server vừa lag, tôi mất đồ và giao dịch nạp tiền vẫn chưa nhận.
 
 Bot có thể tách thành nhiều nhu cầu độc lập, xác định người chơi đang hỏi **SMP, Survival, Skyblock, BoxPvP, Tu Tiên, FFA hay ChunkySMP**, trả lời từ đúng tài liệu của cụm đó, hỏi lại bằng button khi chưa chắc và hiện đúng hành động như **Tạo ticket**, **Báo giao dịch**, **Gọi staff** hoặc **Xem hướng dẫn**. AI không trực tiếp chạy console command, cộng tiền, cấp rank hay hoàn vật phẩm.
+
+## Level Chat — thẻ cấp độ và cấu hình có hướng dẫn
+
+- `/level me`, `/rank` và thông báo lên cấp có thẻ PNG tạo ngay trên bot; lỗi tạo ảnh tự chuyển sang embed. `imageEnabled` mặc định `true`, `accentColor` mặc định `#5865F2`; Level Chat vẫn mặc định tắt.
+- Dashboard có biểu mẫu tiếng Việt, JSON nâng cao và thẻ minh họa. Cảnh báo khi rời bản chưa lưu; tải cấu hình lỗi không được thay bằng mặc định rồi lưu đè. Xem [hướng dẫn dashboard](docs/DASHBOARD_V7.md).
+- API từ chối tên trường chứa secret/token/API key và khóa nhạy cảm ở mọi cấp của JSON, nhưng giữ các trường mở rộng không nhạy cảm. Không nhập credential vào cấu hình.
+- Lỗi XP, đồng bộ role hoặc thông báo lên cấp được tách khỏi luồng ticket/AI. Bot dừng khởi động khi module command/event lỗi; supervisor giữ lịch khởi động lại và giới hạn retry hiện có.
+- Nâng cấp này không đổi công thức XP, schema, outbox hay chữ ký HMAC LobbySign. Không cần migration mới riêng cho thẻ cấp độ; vẫn áp dụng migration còn thiếu khi nâng cấp từ bản cũ.
+- Production phục vụ dashboard đã build qua Express; không public Vite dev/preview. Xem [giới hạn dependency còn lại](SECURITY.md#dependency-audit-snapshot-2026-08-30).
 
 
 ## Nâng cấp v7.3.3 — Trial Polish
