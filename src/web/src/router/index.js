@@ -17,6 +17,7 @@ const routes = [
   { path: '/faqs', component: () => import('../views/FaqsView.vue'), meta: { permission: 'faq.view' } },
   { path: '/knowledge', component: () => import('../views/KnowledgeView.vue'), meta: { permission: 'knowledge.view' } },
   { path: '/smartlearn', component: () => import('../views/SmartLearnView.vue'), meta: { permission: 'smartlearn.view' } },
+  { path: '/levels', component: () => import('../views/LevelsView.vue'), meta: { requiresAdmin: true } },
   { path: '/intelligence', component: () => import('../views/IntelligenceView.vue'), meta: { permission: 'intelligence.view' } },
   { path: '/autotag', component: () => import('../views/AutoTagView.vue'), meta: { requiresAdmin: true } },
   { path: '/webhooks', component: () => import('../views/WebhooksView.vue'), meta: { requiresAdmin: true } },

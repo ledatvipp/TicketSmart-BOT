@@ -178,3 +178,23 @@ export const SmartLearnAPI = {
   get: (id) => client.get(`/api/smartlearn/candidates/${id}`).then((r) => r.data.data),
   review: (id, data) => client.post(`/api/smartlearn/candidates/${id}/review`, data).then((r) => r.data.data),
 };
+
+export const ChatLevelsAPI = {
+  setupStatus: () => client.get('/api/chat-levels/setup-status').then((r) => r.data.data),
+  leaderboard: () => client.get('/api/chat-levels/leaderboard').then((r) => r.data.data),
+  rewards: async () => {
+    try { return (await client.get('/api/chat-levels/rewards')).data.data; }
+    catch (error) {
+      if (error.response?.status !== 404) throw error;
+      return client.get('/api/chat-levels/grants').then((r) => r.data.data);
+    }
+  },
+  retryReward: async (id) => {
+    const pathId = encodeURIComponent(id);
+    try { return (await client.post(`/api/chat-levels/rewards/${pathId}/retry`)).data.data; }
+    catch (error) {
+      if (error.response?.status !== 404) throw error;
+      return client.post(`/api/chat-levels/grants/${pathId}/retry`).then((r) => r.data.data);
+    }
+  },
+};

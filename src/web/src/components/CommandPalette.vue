@@ -12,6 +12,10 @@ const items = ref([]);
 const cursor = ref(0);
 const inputEl = ref(null);
 const loading = ref(false);
+const searchError = ref('');
+const panelEl = ref(null);
+let searchGeneration = 0;
+let returnFocus = null;
 
 const DEFAULT_CMDS = [
   { icon: '📊', label: 'Dashboard', to: '/dashboard', permission: 'analytics.view' },
@@ -25,25 +29,37 @@ const DEFAULT_CMDS = [
   { icon: '🏷️', label: 'Auto-tag rules', to: '/autotag', admin: true },
   { icon: '🔌', label: 'Webhooks', to: '/webhooks', admin: true },
   { icon: '⚙️', label: 'Cấu hình', to: '/config', admin: true },
+  { icon: '🏆', label: 'Level Chat · Cấp độ và phần thưởng', to: '/levels', admin: true },
+  { icon: '🧠', label: 'AI & Actions', to: '/intelligence', permission: 'intelligence.view' },
+  { icon: '📚', label: 'Knowledge Base', to: '/knowledge', permission: 'knowledge.view' },
+  { icon: '🎓', label: 'SmartLearn', to: '/smartlearn', permission: 'smartlearn.view' },
+  { icon: '🗺️', label: 'Cụm máy chủ', to: '/clusters', admin: true },
+  { icon: '📣', label: 'Thông báo', to: '/announcements', admin: true },
+  { icon: '🎨', label: 'Studio ảnh', to: '/banner-generator', admin: true },
 ];
 const permittedCommands = computed(() => DEFAULT_CMDS.filter((item) => (
   item.admin ? auth.isAdmin : !item.permission || auth.hasPermission(item.permission)
 )));
 
-async function runSearch(q) {
+async function runSearch(q, generation) {
+  if (!open.value || generation !== searchGeneration) return;
+  searchError.value = '';
   if (!q || q.length < 2) {
     items.value = permittedCommands.value;
     cursor.value = 0;
+    loading.value = false;
     return;
   }
   loading.value = true;
+  let partialFailure = false;
+  const failed = () => { partialFailure = true; return []; };
   try {
     const [tickets, options, staff, canned, faqs] = await Promise.all([
-      auth.hasPermission('ticket.view') ? TicketsAPI.list({ search: q, limit: 5 }).then((d) => d.tickets || []).catch(() => []) : [],
-      auth.hasPermission('ticket.view') ? OptionsAPI.list().then((arr) => arr.filter((o) => o.name.toLowerCase().includes(q.toLowerCase())).slice(0, 5)).catch(() => []) : [],
-      auth.isAdmin ? StaffAPI.list().then((arr) => arr.filter((s) => s.username.toLowerCase().includes(q.toLowerCase())).slice(0, 5)).catch(() => []) : [],
-      auth.hasPermission('canned.view') ? CannedAPI.list().then((arr) => arr.filter((c) => c.shortcut.includes(q) || c.title.toLowerCase().includes(q.toLowerCase())).slice(0, 5)).catch(() => []) : [],
-      auth.hasPermission('faq.view') ? FaqAPI.list({ search: q, all: 'true' }).then((arr) => arr.slice(0, 3)).catch(() => []) : [],
+      auth.hasPermission('ticket.view') ? TicketsAPI.list({ search: q, limit: 5 }).then((d) => d.tickets || []).catch(failed) : [],
+      auth.hasPermission('ticket.view') ? OptionsAPI.list().then((arr) => arr.filter((o) => o.name.toLowerCase().includes(q.toLowerCase())).slice(0, 5)).catch(failed) : [],
+      auth.isAdmin ? StaffAPI.list().then((arr) => arr.filter((s) => s.username.toLowerCase().includes(q.toLowerCase())).slice(0, 5)).catch(failed) : [],
+      auth.hasPermission('canned.view') ? CannedAPI.list().then((arr) => arr.filter((c) => c.shortcut.includes(q) || c.title.toLowerCase().includes(q.toLowerCase())).slice(0, 5)).catch(failed) : [],
+      auth.hasPermission('faq.view') ? FaqAPI.list({ search: q, all: 'true' }).then((arr) => arr.slice(0, 3)).catch(failed) : [],
     ]);
 
     const results = [];
@@ -63,28 +79,50 @@ async function runSearch(q) {
     // Default cmds matching too
     const dq = q.toLowerCase();
     const matchedDefault = permittedCommands.value.filter((c) => c.label.toLowerCase().includes(dq));
+    if (!open.value || generation !== searchGeneration) return;
     items.value = [...matchedDefault, ...results];
+    searchError.value = partialFailure ? 'Một số nguồn chưa tải được. Bạn vẫn có thể mở các trang bên dưới.' : '';
     cursor.value = 0;
   } finally {
-    loading.value = false;
+    if (generation === searchGeneration) loading.value = false;
   }
 }
 
 let searchTimer = null;
 watch(query, (v) => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => runSearch(v), 200);
+  const generation = ++searchGeneration;
+  if (v.trim().length < 2) {
+    items.value = permittedCommands.value;
+    cursor.value = 0;
+    loading.value = false;
+    searchError.value = '';
+    return;
+  }
+  loading.value = true;
+  searchTimer = setTimeout(() => runSearch(v.trim(), generation), 200);
 });
 
 function openPalette() {
+  returnFocus = document.activeElement;
+  clearTimeout(searchTimer);
+  searchGeneration++;
   open.value = true;
   query.value = '';
   items.value = permittedCommands.value;
   cursor.value = 0;
+  loading.value = false;
+  searchError.value = '';
   nextTick(() => inputEl.value?.focus());
 }
 
-function closePalette() { open.value = false; }
+function closePalette() {
+  open.value = false;
+  searchGeneration++;
+  clearTimeout(searchTimer);
+  loading.value = false;
+  returnFocus?.focus?.();
+}
 
 function pick(item) {
   if (item.to) router.push(item.to);
@@ -99,36 +137,60 @@ function onKey(e) {
     return;
   }
   if (!open.value) return;
-  if (e.key === 'Escape') return closePalette();
-  if (e.key === 'ArrowDown') { e.preventDefault(); cursor.value = Math.min(cursor.value + 1, items.value.length - 1); }
+  if (e.key === 'Escape') { e.preventDefault(); return closePalette(); }
+  if (e.key === 'Tab') {
+    const controls = [inputEl.value, panelEl.value?.querySelector('[aria-label="Đóng tìm kiếm"]')].filter(Boolean);
+    const target = e.shiftKey ? controls.at(-1) : controls[0];
+    if ((e.shiftKey && document.activeElement === controls[0]) || (!e.shiftKey && document.activeElement === controls.at(-1))) {
+      e.preventDefault(); target?.focus();
+    }
+  }
+  if (e.key === 'ArrowDown') { e.preventDefault(); cursor.value = Math.max(0, Math.min(cursor.value + 1, items.value.length - 1)); }
   if (e.key === 'ArrowUp')   { e.preventDefault(); cursor.value = Math.max(cursor.value - 1, 0); }
-  if (e.key === 'Enter')     { e.preventDefault(); if (items.value[cursor.value]) pick(items.value[cursor.value]); }
+  if (e.key === 'Enter' && document.activeElement === inputEl.value) { e.preventDefault(); if (!loading.value && items.value[cursor.value]) pick(items.value[cursor.value]); }
 }
 
+watch(cursor, () => nextTick(() => document.getElementById(`command-option-${cursor.value}`)?.scrollIntoView({ block: 'nearest' })));
+
 onMounted(() => window.addEventListener('keydown', onKey));
-onUnmounted(() => window.removeEventListener('keydown', onKey));
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey);
+  clearTimeout(searchTimer);
+  searchGeneration++;
+});
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="modal-fade">
       <div v-if="open" class="modal-backdrop" @click.self="closePalette" style="align-items: flex-start; padding-top: 15vh;">
-        <div class="modal-panel size-md" style="padding: 0; overflow: hidden;">
+        <div ref="panelEl" class="modal-panel size-md" role="dialog" aria-modal="true" aria-label="Tìm kiếm nhanh" style="padding: 0; overflow: hidden;">
           <div style="padding: 8px 14px; border-bottom: 1px solid var(--line-1); display: flex; align-items: center; gap: 10px;">
             <span style="font-size: 16px;">🔍</span>
             <input
               ref="inputEl"
               v-model="query"
-              placeholder="Tìm ticket, option, staff, canned, FAQ..."
+              role="combobox"
+              aria-label="Tìm trang hoặc nội dung"
+              aria-autocomplete="list"
+              aria-expanded="true"
+              aria-controls="command-results"
+              :aria-activedescendant="!loading && items[cursor] ? `command-option-${cursor}` : undefined"
+              placeholder="Tìm Level Chat, ticket, cấu hình..."
               style="flex: 1; background: transparent; border: 0; padding: 8px 0; font-size: 14px;"
             />
-            <kbd style="background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 10px;">ESC</kbd>
+            <button type="button" class="palette-close" aria-label="Đóng tìm kiếm" @click="closePalette">ESC</button>
           </div>
-          <div style="max-height: 50vh; overflow-y: auto; padding: 6px;">
-            <div v-if="loading" class="empty">Đang tìm...</div>
-            <div v-else-if="!items.length" class="empty">Không có kết quả</div>
+          <p v-if="searchError" class="muted" role="status" style="padding: 8px 14px;">{{ searchError }}</p>
+          <div id="command-results" role="listbox" aria-label="Kết quả tìm kiếm" :aria-busy="loading" style="max-height: 50vh; overflow-y: auto; padding: 6px;">
+            <div v-if="loading" class="empty" role="status">Đang tìm...</div>
+            <div v-else-if="!items.length" class="empty" role="status">Không có kết quả. Thử từ khóa khác.</div>
             <div
+              v-show="!loading"
               v-for="(it, i) in items" :key="i"
+              :id="`command-option-${i}`"
+              role="option"
+              :aria-selected="cursor === i"
               @click="pick(it)"
               @mouseenter="cursor = i"
               :style="{
@@ -154,3 +216,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKey));
     </Transition>
   </Teleport>
 </template>
+
+<style scoped>
+.palette-close { min-width: 44px; min-height: 44px; background: var(--bg-3); color: var(--on-surface); border: 1px solid var(--line-1); border-radius: 8px; cursor: pointer; }
+.palette-close:focus-visible { outline: 2px solid var(--primary, #8796ff); outline-offset: 2px; }
+@media (max-width: 600px) { input { font-size: 16px !important; min-width: 0; } .modal-panel { max-width: calc(100vw - 24px); } }
+</style>

@@ -6,6 +6,7 @@ import { socketState } from '../socket';
 defineProps({
   open: { type: Boolean, default: false },
   collapsed: { type: Boolean, default: false },
+  mobile: { type: Boolean, default: false },
 });
 const emit = defineEmits(['close', 'toggle-collapse']);
 const auth = useAuth();
@@ -25,6 +26,7 @@ const sections = computed(() => {
     { to: '/intelligence', label: 'AI & Actions', icon: 'neurology', permission: 'intelligence.view' },
     { to: '/knowledge', label: 'Knowledge Base', icon: 'auto_stories', permission: 'knowledge.view' },
     { to: '/smartlearn', label: 'SmartLearn', icon: 'school', permission: 'smartlearn.view' },
+    { to: '/levels', label: 'Level Chat', icon: 'workspace_premium', admin: true },
     { to: '/canned', label: 'Mẫu trả lời', icon: 'quickreply', permission: 'canned.view' },
     { to: '/faqs', label: 'FAQ cũ', icon: 'help_center', permission: 'faq.view' },
   ];
@@ -59,14 +61,14 @@ const userInitial = computed(() => (auth.user?.username || '?')[0].toUpperCase()
 
 <template>
   <div class="sidebar-backdrop" :class="{ show: open }" @click="emit('close')"></div>
-  <aside class="sidebar sidebar-v7" :class="{ open, collapsed }">
+  <aside id="primary-sidebar" class="sidebar sidebar-v7" :class="{ open, collapsed: collapsed && !mobile }" :inert="mobile && !open" aria-label="Menu quản trị">
     <div class="sidebar-v7-brand">
       <div class="brand-orb"><span>IS</span></div>
       <div class="brand-copy">
         <strong>IS7MC Control</strong>
         <small>Support Intelligence</small>
       </div>
-      <button class="sidebar-collapse-btn" title="Thu gọn sidebar" @click="emit('toggle-collapse')">
+      <button class="sidebar-collapse-btn" :title="mobile ? 'Đóng menu' : 'Thu gọn sidebar'" :aria-label="mobile ? 'Đóng menu' : 'Thu gọn sidebar'" @click="mobile ? emit('close') : emit('toggle-collapse')">
         <span class="material-symbols-outlined">dock_to_right</span>
       </button>
     </div>
@@ -80,7 +82,7 @@ const userInitial = computed(() => (auth.user?.username || '?')[0].toUpperCase()
       <span :class="['live-pill', { offline: !socketState.connected }]">{{ socketState.connected ? 'LIVE' : 'OFF' }}</span>
     </div>
 
-    <nav class="sidebar-v7-nav">
+    <nav class="sidebar-v7-nav" aria-label="Điều hướng chính">
       <section v-for="group in sections" :key="group.label" class="sidebar-nav-group">
         <h3>{{ group.label }}</h3>
         <RouterLink
@@ -89,7 +91,8 @@ const userInitial = computed(() => (auth.user?.username || '?')[0].toUpperCase()
           :to="item.to"
           class="nav-link nav-link-v7"
           active-class="active"
-          :title="collapsed ? item.label : undefined"
+          :title="collapsed && !mobile ? item.label : undefined"
+          :aria-label="item.label"
         >
           <span class="nav-icon"><span class="material-symbols-outlined">{{ item.icon }}</span></span>
           <span class="nav-label">{{ item.label }}</span>

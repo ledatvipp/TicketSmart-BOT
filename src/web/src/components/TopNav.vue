@@ -8,6 +8,7 @@ import { socketState } from '../socket';
 const auth = useAuth();
 const route = useRoute();
 const emit = defineEmits(['toggle-sidebar']);
+defineProps({ navExpanded: { type: Boolean, default: true } });
 const theme = ref('dark');
 
 const pageMap = {
@@ -19,6 +20,16 @@ const pageMap = {
   '/smartlearn': ['SmartLearn', 'Hàng đợi kiến thức do staff xác minh'],
   '/intelligence': ['AI & Actions', 'Quan sát chất lượng nhận diện và hành động'],
   '/config': ['Cấu hình', 'Điều khiển bot, ticket và trải nghiệm người dùng'],
+  '/levels': ['Level Chat', 'Cấp độ, hình ảnh thành viên và phần thưởng Minecraft'],
+  '/options': ['Loại ticket', 'Sắp xếp biểu mẫu và luồng hỗ trợ'],
+  '/staff': ['Đội ngũ', 'Quản lý nhân sự và quyền truy cập'],
+  '/canned': ['Mẫu trả lời', 'Phản hồi nhanh và nhất quán'],
+  '/audit': ['Nhật ký', 'Tra cứu các thao tác quản trị'],
+  '/faqs': ['FAQ', 'Những câu hỏi thường gặp'],
+  '/autotag': ['Auto tags', 'Tự động phân loại yêu cầu hỗ trợ'],
+  '/webhooks': ['Webhooks', 'Kết nối và theo dõi sự kiện hệ thống'],
+  '/announcements': ['Thông báo', 'Soạn thông báo cho cộng đồng Discord'],
+  '/banner-generator': ['Studio ảnh', 'Thiết kế ảnh thông báo'],
 };
 const pageInfo = computed(() => {
   const key = Object.keys(pageMap).find((path) => route.path === path || route.path.startsWith(`${path}/`));
@@ -43,7 +54,7 @@ onMounted(() => {
 <template>
   <header class="topnav topnav-v7">
     <div class="topnav-v7-left">
-      <button class="topnav-icon-btn" title="Mở / thu gọn menu" @click="emit('toggle-sidebar')">
+      <button id="sidebar-toggle" class="topnav-icon-btn" title="Mở / thu gọn menu" aria-label="Mở / thu gọn menu" aria-controls="primary-sidebar" :aria-expanded="navExpanded" @click="emit('toggle-sidebar')">
         <span class="material-symbols-outlined">menu_open</span>
       </button>
       <div class="page-context">
@@ -53,7 +64,7 @@ onMounted(() => {
     </div>
 
     <div class="topnav-v7-actions">
-      <button class="command-trigger" @click="openPalette">
+      <button class="command-trigger" aria-label="Tìm kiếm nhanh" @click="openPalette">
         <span class="material-symbols-outlined">search</span>
         <span>Tìm kiếm nhanh</span>
         <kbd>Ctrl K</kbd>
@@ -63,7 +74,7 @@ onMounted(() => {
         <span></span>{{ socketState.connected ? 'Realtime' : 'Offline' }}
       </div>
 
-      <button class="topnav-icon-btn" :title="theme === 'dark' ? 'Chế độ sáng' : 'Chế độ tối'" @click="toggleTheme">
+      <button class="topnav-icon-btn" :title="theme === 'dark' ? 'Chế độ sáng' : 'Chế độ tối'" :aria-label="theme === 'dark' ? 'Chế độ sáng' : 'Chế độ tối'" @click="toggleTheme">
         <span class="material-symbols-outlined">{{ theme === 'dark' ? 'light_mode' : 'dark_mode' }}</span>
       </button>
 
