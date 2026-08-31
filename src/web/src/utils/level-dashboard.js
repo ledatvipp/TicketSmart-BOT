@@ -7,7 +7,9 @@ export const DEFAULT_LEVEL_CONFIG = Object.freeze({
   minContentLength: 10,
   cooldownSeconds: 60,
   similarityWindow: 10,
-  similarityThreshold: 0.9,
+  similarityThreshold: 0.7,
+  profanityTerms: ['đm', 'dmm', 'dcm', 'vcl', 'clm', 'fuck', 'shit', 'bitch'],
+  profanityXpMultiplier: 0.5,
   levelRoles: [],
   rewardSpins: 1,
   rewardMilestones: [],
@@ -23,6 +25,9 @@ export const DEFAULT_LEVEL_CONFIG = Object.freeze({
 
 const DISCORD_ID = /^\d{15,22}$/;
 const SENSITIVE_KEY = /(?:token|secret|password|api[_-]?key|credential|(?:private|signing|encryption)[_-]?key)/i;
+function normalizedProfanityTerm(value) {
+  return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/đ/g, 'd').replace(/[^\p{L}\p{N}]/gu, '');
+}
 export const cloneLevelConfig = (value = DEFAULT_LEVEL_CONFIG) => JSON.parse(JSON.stringify(value));
 
 export function parseDiscordIds(text) {
@@ -67,7 +72,9 @@ export function validateLevelConfig(value) {
   ]) {
     if (!Number.isInteger(value[key]) || value[key] < min || value[key] > max) errors.push(`${label} phải là số nguyên từ ${min} đến ${max}.`);
   }
-  if (typeof value.similarityThreshold !== 'number' || !Number.isFinite(value.similarityThreshold) || value.similarityThreshold < .5 || value.similarityThreshold > 1) errors.push('Ngưỡng tương đồng phải từ 0.5 đến 1.');
+  if (typeof value.similarityThreshold !== 'number' || !Number.isFinite(value.similarityThreshold) || value.similarityThreshold < .5 || value.similarityThreshold > .7) errors.push('Ngưỡng tương đồng phải từ 0.5 đến 0.7 để luôn chặn tin giống 70% trở lên.');
+  if (!Array.isArray(value.profanityTerms) || value.profanityTerms.length > 100 || value.profanityTerms.some((term) => typeof term !== 'string' || !term.trim() || term.length > 64 || !normalizedProfanityTerm(term))) errors.push('Danh sách từ giảm EXP: tối đa 100 từ/cụm từ, mỗi mục 1–64 ký tự và phải chứa chữ hoặc số.');
+  if (typeof value.profanityXpMultiplier !== 'number' || !Number.isFinite(value.profanityXpMultiplier) || value.profanityXpMultiplier < .1 || value.profanityXpMultiplier > .9) errors.push('Tỷ lệ EXP khi có từ bậy phải từ 0.1 đến 0.9.');
   if (typeof value.minecraftServiceId !== 'string' || !/^[A-Za-z0-9._-]{1,64}$/.test(value.minecraftServiceId)) errors.push('Service ID cần 1–64 chữ cái, chữ số, dấu chấm, gạch dưới hoặc gạch ngang.');
   if (value.announcementChannelId !== null && (typeof value.announcementChannelId !== 'string' || !DISCORD_ID.test(value.announcementChannelId))) errors.push('Kênh thông báo phải trống hoặc là ID Discord 15–22 chữ số.');
   if (typeof value.accentColor !== 'string' || !/^#[\da-f]{6}$/i.test(value.accentColor)) errors.push('Màu thẻ cần mã hex 6 chữ số, ví dụ #5865F2.');

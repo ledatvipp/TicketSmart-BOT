@@ -16,6 +16,8 @@ test('dashboard defaults include compatible image settings and empty channel eli
   assert.equal(config.imageEnabled, true);
   assert.equal(config.accentColor, '#5865F2');
   assert.deepEqual(config.allowedChannelIds, []);
+  assert.equal(config.similarityThreshold, 0.7);
+  assert.equal(config.profanityXpMultiplier, 0.5);
   assert.deepEqual(validateLevelConfig(config), []);
   config.levelRoles.push({ minLevel: 10, roleId: '1543196526946291785' });
   assert.equal(DEFAULT_LEVEL_CONFIG.levelRoles.length, 0);
@@ -62,6 +64,11 @@ test('client validation blocks fractional counters, invalid presentation values 
   }
   for (const accentColor of ['red', '#123', '#1234567', 'url(https://example.com)']) assert.ok(validateLevelConfig({ ...cloneLevelConfig(), accentColor }).length);
   assert.ok(validateLevelConfig({ ...cloneLevelConfig(), imageEnabled: 'true' }).length);
+  assert.ok(validateLevelConfig({ ...cloneLevelConfig(), similarityThreshold: 0.71 }).length);
+  assert.ok(validateLevelConfig({ ...cloneLevelConfig(), profanityXpMultiplier: 1 }).length);
+  assert.ok(validateLevelConfig({ ...cloneLevelConfig(), profanityTerms: [''] }).length);
+  assert.ok(validateLevelConfig({ ...cloneLevelConfig(), profanityTerms: ['!!!'] }).length);
+  assert.ok(validateLevelConfig({ ...cloneLevelConfig(), profanityTerms: Array(101).fill('term') }).length);
   for (const key of ['token', 'apiKey', 'signingKey', 'private_key', 'encryption-key', 'password']) {
     assert.match(validateLevelConfig({ ...cloneLevelConfig(), extension: [{ [key]: 'diagnostic-placeholder' }] }).join(' '), /Không nhập token/);
   }

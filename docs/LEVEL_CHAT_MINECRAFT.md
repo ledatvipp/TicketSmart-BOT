@@ -12,7 +12,9 @@ Guild configuration is stored as `GuildConfig.chatLevelConfig`; it defaults disa
   "minContentLength": 10,
   "cooldownSeconds": 60,
   "similarityWindow": 10,
-  "similarityThreshold": 0.9,
+  "similarityThreshold": 0.7,
+  "profanityTerms": ["đm", "dmm", "dcm", "vcl", "clm", "fuck", "shit", "bitch"],
+  "profanityXpMultiplier": 0.5,
   "levelRoles": [{ "minLevel": 10, "roleId": "..." }],
   "rewardSpins": 1,
   "rewardMilestones": [{ "minLevel": 10, "spins": 2 }],
@@ -27,7 +29,7 @@ Guild configuration is stored as `GuildConfig.chatLevelConfig`; it defaults disa
 }
 ```
 
-When `requiredVerifiedRoleIds` is non-empty, only members holding at least one listed role can earn XP; an empty list disables that role gate. Eligible messages must also have at least the configured number of useful characters. When Level Chat is enabled, `allowedChannelIds` must contain at least one channel: an empty allow-list awards no XP. `!` commands never earn XP. The ledger makes Discord message processing idempotent; after static eligibility passes it also records cooldown/similarity rejects with zero XP, so a delayed replay cannot later earn XP. Levels start at 0 and crossing level `n` requires `100 + 25 × (n - 1)` XP. One durable reward grant is created per guild/user/level; the highest applicable milestone determines its spins. Each grant snapshots its `minecraftServiceId`, attempt limit, and retry base at creation.
+When `requiredVerifiedRoleIds` is non-empty, only members holding at least one listed role can earn XP; an empty list disables that role gate. Eligible messages must also have at least the configured number of useful characters. When Level Chat is enabled, `allowedChannelIds` must contain at least one channel: an empty allow-list awards no XP. `!` commands never earn XP. A message that is at least 70% similar to one of the member's recent rewarded messages receives no XP; exact repeats are included. The configurable threshold is capped at 0.7 (lower values only make the filter stricter), and legacy settings above 0.7 are automatically tightened when read. A message containing a whole configured profanity word/phrase receives `floor(xpPerMessage × profanityXpMultiplier)`; when `xpPerMessage` is 1 this intentionally becomes 0 XP so it remains lower than a clean message. Matching ignores case, Vietnamese accents and inserted punctuation/spaces, but keeps word boundaries to avoid matching a profanity abbreviation inside a normal word. The message is not deleted or otherwise moderated. Default multiplier is 0.5, and the dashboard accepts a bounded list of up to 100 entries (1–64 characters) and a multiplier from 0.1 to 0.9. The ledger makes Discord message processing idempotent; after static eligibility passes it also records cooldown/similarity rejects with zero XP, so a delayed replay cannot later earn XP. Levels start at 0 and crossing level `n` requires `100 + 25 × (n - 1)` XP. One durable reward grant is created per guild/user/level; the highest applicable milestone determines its spins. Each grant snapshots its `minecraftServiceId`, attempt limit, and retry base at creation.
 
 Players can use `/level me`, `/level top`, `/level rewards`, `/rank`, and `/leaderboard`, or the `!level`, `!rank`, and `!leaderboard` equivalents. Discord Administrators and users with configured `adminRoleIds` can use `/level admin add-xp`, `set-level`, `sync-role`, and `retry-reward`.
 

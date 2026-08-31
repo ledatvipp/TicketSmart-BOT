@@ -11,7 +11,9 @@ export const DEFAULT_CHAT_LEVEL_CONFIG = Object.freeze({
   minContentLength: 10,
   cooldownSeconds: 60,
   similarityWindow: 10,
-  similarityThreshold: 0.9,
+  similarityThreshold: 0.7,
+  profanityTerms: ['đm', 'dmm', 'dcm', 'vcl', 'clm', 'fuck', 'shit', 'bitch'],
+  profanityXpMultiplier: 0.5,
   levelRoles: [],
   rewardSpins: 1,
   rewardMilestones: [],
@@ -67,6 +69,29 @@ function minecraftServiceId(value) {
   return id;
 }
 
+function profanityTerms(value) {
+  const values = value ?? DEFAULT_CHAT_LEVEL_CONFIG.profanityTerms;
+  if (!Array.isArray(values)) throw new ValidationError('Danh sách từ giảm XP phải là một mảng');
+  if (values.length > 100) throw new ValidationError('Danh sách từ giảm XP không được vượt quá 100 mục');
+  const unique = new Map();
+  for (const value of values) {
+    if (typeof value !== 'string') throw new ValidationError('Từ giảm XP phải là chuỗi ký tự');
+    const term = cleanString(value, { min: 1, max: 64, allowEmpty: false, field: 'Từ giảm XP' });
+    const normalized = normalizeChatContent(term);
+    if (!normalized) throw new ValidationError('Từ giảm XP phải chứa chữ hoặc số');
+    if (!unique.has(normalized)) unique.set(normalized, term);
+  }
+  return [...unique.values()];
+}
+
+function profanityXpMultiplier(value) {
+  const multiplier = Number(value ?? DEFAULT_CHAT_LEVEL_CONFIG.profanityXpMultiplier);
+  if (!Number.isFinite(multiplier) || multiplier < 0.1 || multiplier > 0.9) {
+    throw new ValidationError('Tỷ lệ XP khi có từ giảm XP phải từ 0.1 đến 0.9');
+  }
+  return multiplier;
+}
+
 export function normalizeChatLevelConfig(value) {
   const source = value === undefined ? {} : parseJsonObject(value, {});
   const sourceJson = JSON.stringify(source);
@@ -87,6 +112,10 @@ export function normalizeChatLevelConfig(value) {
   if (typeof accentColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(accentColor)) {
     throw new ValidationError('Màu Level Chat phải có dạng #RRGGBB');
   }
+  const requestedSimilarityThreshold = Number(source.similarityThreshold ?? DEFAULT_CHAT_LEVEL_CONFIG.similarityThreshold);
+  if (!Number.isFinite(requestedSimilarityThreshold) || requestedSimilarityThreshold < 0.5 || requestedSimilarityThreshold > 1) {
+    throw new ValidationError('Ngưỡng tương đồng phải từ 0.5 đến 1');
+  }
   const config = {
     ...DEFAULT_CHAT_LEVEL_CONFIG,
     ...source,
@@ -98,7 +127,10 @@ export function normalizeChatLevelConfig(value) {
     minContentLength: cleanInteger(source.minContentLength ?? DEFAULT_CHAT_LEVEL_CONFIG.minContentLength, { min: 1, max: 1000, field: 'Độ dài tối thiểu' }),
     cooldownSeconds: cleanInteger(source.cooldownSeconds ?? DEFAULT_CHAT_LEVEL_CONFIG.cooldownSeconds, { min: 0, max: 3600, field: 'Cooldown' }),
     similarityWindow: cleanInteger(source.similarityWindow ?? DEFAULT_CHAT_LEVEL_CONFIG.similarityWindow, { min: 1, max: 100, field: 'Cửa sổ so sánh' }),
-    similarityThreshold: Number(source.similarityThreshold ?? DEFAULT_CHAT_LEVEL_CONFIG.similarityThreshold),
+    // Older 0.9 configs remain valid but are tightened to the 70% anti-repeat guarantee.
+    similarityThreshold: Math.min(DEFAULT_CHAT_LEVEL_CONFIG.similarityThreshold, requestedSimilarityThreshold),
+    profanityTerms: profanityTerms(source.profanityTerms),
+    profanityXpMultiplier: profanityXpMultiplier(source.profanityXpMultiplier),
     minecraftServiceId: minecraftServiceId(source.minecraftServiceId ?? DEFAULT_CHAT_LEVEL_CONFIG.minecraftServiceId),
     maxRewardAttempts: cleanInteger(source.maxRewardAttempts ?? DEFAULT_CHAT_LEVEL_CONFIG.maxRewardAttempts, { min: 1, max: 100, field: 'Số lần thử thưởng tối đa' }),
     rewardRetryBaseSeconds: cleanInteger(source.rewardRetryBaseSeconds ?? DEFAULT_CHAT_LEVEL_CONFIG.rewardRetryBaseSeconds, { min: 1, max: 3600, field: 'Thời gian retry thưởng cơ bản' }),
@@ -108,10 +140,6 @@ export function normalizeChatLevelConfig(value) {
     announcementChannelId: optionalId(source.announcementChannelId, 'Announcement channel ID'),
     adminRoleIds: idArray(source.adminRoleIds ?? [], 'Admin role ID'),
   };
-  if (!Number.isFinite(config.similarityThreshold) || config.similarityThreshold < 0.5 || config.similarityThreshold > 1) {
-    throw new ValidationError('Ngưỡng tương đồng phải từ 0.5 đến 1');
-  }
-
   const roleRows = Array.isArray(source.levelRoles) ? source.levelRoles : [];
   if (roleRows.length > 100) throw new ValidationError('Level roles không được vượt quá 100 mục');
   config.levelRoles = roleRows.map((row) => ({
@@ -158,6 +186,7 @@ export function normalizeChatContent(content) {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/đ/g, 'd')
     .replace(/https?:\/\/\S+/g, ' ')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
@@ -176,6 +205,33 @@ export function contentSimilarity(left, right) {
   let shared = 0;
   for (const token of a) if (b.has(token)) shared += 1;
   return (2 * shared) / (a.size + b.size);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function containsConfiguredProfanity(content, terms) {
+  const comparableContent = String(content || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .replace(/https?:\/\/\S+/g, ' ');
+  return terms.some((term) => {
+    const characters = [...normalizeChatContent(term).replace(/\s/g, '')];
+    if (!characters.length) return false;
+    const pattern = characters.map(escapeRegExp).join('[^\\p{L}\\p{N}]*');
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${pattern}(?=$|[^\\p{L}\\p{N}])`, 'u').test(comparableContent);
+  });
+}
+
+function experienceForChatMessage(config, content) {
+  const moderated = containsConfiguredProfanity(content, config.profanityTerms);
+  return {
+    moderated,
+    experienceGained: moderated ? Math.floor(config.xpPerMessage * config.profanityXpMultiplier) : config.xpPerMessage,
+  };
 }
 
 export function rewardSpinsForLevel(config, level) {
@@ -270,17 +326,19 @@ export async function awardChatMessage({ guildId, userId, messageId, channelId, 
         return { awarded: false, reason: 'similar' };
       }
 
-      const { level, experience, crossedLevels } = calculateProgress(profile, normalizedConfig.xpPerMessage);
+      const { moderated, experienceGained } = experienceForChatMessage(normalizedConfig, content);
+      if (experienceGained === 0) return { awarded: false, reason: 'profanity', moderated: true };
+      const { level, experience, crossedLevels } = calculateProgress(profile, experienceGained);
       await tx.chatLevelMessage.update({
         where: { guildId_messageId: { guildId, messageId } },
-        data: { awardedExperience: normalizedConfig.xpPerMessage },
+        data: { awardedExperience: experienceGained },
       });
       const updated = await tx.chatLevelProfile.update({
         where: { guildId_userId: { guildId, userId } },
-        data: { level, experience, totalExperience: { increment: normalizedConfig.xpPerMessage }, lastAwardedAt: now },
+        data: { level, experience, totalExperience: { increment: experienceGained }, lastAwardedAt: now },
       });
       const grants = await createRewardGrants(tx, { guildId, userId, crossedLevels, config: normalizedConfig });
-      return { awarded: true, experienceGained: normalizedConfig.xpPerMessage, profile: updated, crossedLevels, grants };
+      return { awarded: true, experienceGained, moderated, profile: updated, crossedLevels, grants };
       });
     } catch (error) {
       if (isUniqueError(error)) return { awarded: false, reason: 'duplicate' };

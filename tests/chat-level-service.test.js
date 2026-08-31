@@ -68,7 +68,10 @@ test('level formula and normalized config use documented defaults', () => {
   assert.equal(experienceForNextLevel(4), 175);
   assert.equal(normalizeChatContent('  Xin CHÀO!!! https://example.com  '), 'xin chao');
   assert.equal(contentSimilarity('xin chao ban', 'ban xin chao'), 1);
-  assert.deepEqual(normalizeChatLevelConfig({ enabled: true, requiredVerifiedRoleIds: [ROLE] }).requiredVerifiedRoleIds, [ROLE]);
+  const config = normalizeChatLevelConfig({ enabled: true, requiredVerifiedRoleIds: [ROLE] });
+  assert.deepEqual(config.requiredVerifiedRoleIds, [ROLE]);
+  assert.equal(config.similarityThreshold, 0.7);
+  assert.equal(config.profanityXpMultiplier, 0.5);
 });
 
 test('anti-farm cooldown/similarity and message idempotency do not award twice', async () => {
@@ -82,6 +85,53 @@ test('anti-farm cooldown/similarity and message idempotency do not award twice',
   assert.equal(duplicate.reason, 'duplicate');
   const similar = await awardChatMessage({ ...base, messageId: '523456789012345678', content: 'hoàn toàn khác tin nhắn hữu ích đây là một', now: new Date('2026-01-01T00:01:00Z') });
   assert.equal(similar.reason, 'similar');
+});
+
+test('70 percent near-duplicate messages never receive XP', async () => {
+  const db = createAwardDb();
+  const config = normalizeChatLevelConfig({ enabled: true, allowedChannelIds: ['323456789012345678'], cooldownSeconds: 0 });
+  const base = { guildId: GUILD, userId: USER, channelId: '323456789012345678', memberRoleIds: [ROLE], config, db };
+  const first = await awardChatMessage({ ...base, messageId: '533456789012345678', content: 'alpha bravo charlie delta echo foxtrot golf hotel india juliet', now: new Date('2026-01-01T00:00:00Z') });
+  const repeated = await awardChatMessage({ ...base, messageId: '543456789012345678', content: 'alpha bravo charlie delta echo foxtrot golf kilo lima mike', now: new Date('2026-01-01T00:01:00Z') });
+  assert.equal(first.awarded, true);
+  assert.equal(contentSimilarity(normalizeChatContent('alpha bravo charlie delta echo foxtrot golf hotel india juliet'), normalizeChatContent('alpha bravo charlie delta echo foxtrot golf kilo lima mike')), 0.7);
+  assert.deepEqual(repeated, { awarded: false, reason: 'similar' });
+});
+
+test('configured profanity receives reduced XP while clean messages keep full XP', async () => {
+  const db = createAwardDb();
+  const config = normalizeChatLevelConfig({
+    enabled: true, allowedChannelIds: ['323456789012345678'], cooldownSeconds: 0, xpPerMessage: 21,
+    profanityTerms: ['đm'], profanityXpMultiplier: 0.5,
+  });
+  const base = { guildId: GUILD, userId: USER, channelId: '323456789012345678', memberRoleIds: [ROLE], config, db };
+  const clean = await awardChatMessage({ ...base, messageId: '553456789012345678', content: 'Mình đang chia sẻ một ý tưởng hữu ích cho cộng đồng', now: new Date('2026-01-01T00:00:00Z') });
+  const moderated = await awardChatMessage({ ...base, messageId: '563456789012345678', content: 'ĐM, ý tưởng này cần được bàn thêm ở kênh khác', now: new Date('2026-01-01T00:01:00Z') });
+  assert.equal(clean.experienceGained, 21);
+  assert.equal(clean.moderated, false);
+  assert.equal(moderated.experienceGained, 10);
+  assert.equal(moderated.moderated, true);
+  assert.equal(moderated.profile.totalExperience, 31);
+
+  const boundaryDb = createAwardDb();
+  const boundary = await awardChatMessage({
+    ...base, db: boundaryDb, messageId: '573456789012345678', content: 'Admin đang tổng hợp các ý kiến để gửi đội ngũ.', now: new Date('2026-01-01T00:02:00Z'),
+  });
+  assert.equal(boundary.experienceGained, 21);
+  assert.equal(boundary.moderated, false);
+
+  const obfuscatedDb = createAwardDb();
+  const obfuscated = await awardChatMessage({
+    ...base, db: obfuscatedDb, messageId: '578456789012345678', content: 'Đ.m, tin nhắn này vẫn đủ dài để được tính.', now: new Date('2026-01-01T00:02:30Z'),
+  });
+  assert.equal(obfuscated.experienceGained, 10);
+  assert.equal(obfuscated.moderated, true);
+
+  const minimumDb = createAwardDb();
+  const minimum = await awardChatMessage({
+    ...base, db: minimumDb, config: { ...config, xpPerMessage: 1 }, messageId: '583456789012345678', content: 'DM, tin nhắn này đủ dài để vẫn được tính.', now: new Date('2026-01-01T00:03:00Z'),
+  });
+  assert.deepEqual(minimum, { awarded: false, reason: 'profanity', moderated: true });
 });
 
 test('concurrent distinct messages for one profile preserve both XP awards', async () => {
@@ -250,4 +300,13 @@ test('premium config rejects malformed accent colors and unsupported boolean val
   for (const imageEnabled of [{}, [], 'yes', 2]) {
     assert.throws(() => normalizeChatLevelConfig({ imageEnabled }), /boolean/);
   }
+  for (const similarityThreshold of [0.49, 1.01, 'nope']) {
+    assert.throws(() => normalizeChatLevelConfig({ similarityThreshold }), /0.5 đến 1/);
+  }
+  assert.equal(normalizeChatLevelConfig({ similarityThreshold: 0.9 }).similarityThreshold, 0.7);
+  for (const profanityXpMultiplier of [0.09, 0.91, 'nope']) {
+    assert.throws(() => normalizeChatLevelConfig({ profanityXpMultiplier }), /0.1 đến 0.9/);
+  }
+  assert.throws(() => normalizeChatLevelConfig({ profanityTerms: [''] }), /Từ giảm XP/);
+  assert.throws(() => normalizeChatLevelConfig({ profanityTerms: [{}] }), /chuỗi ký tự/);
 });

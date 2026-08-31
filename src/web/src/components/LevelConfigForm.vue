@@ -14,6 +14,9 @@ watch(() => props.config, (value) => {
   for (const field of idFields) idText[field.key] = Array.isArray(value[field.key]) ? value[field.key].join('\n') : '';
 }, { immediate: true });
 function updateIds(key, text) { idText[key] = text; props.config[key] = parseDiscordIds(text); }
+function updateProfanityTerms(text) {
+  props.config.profanityTerms = [...new Set(String(text || '').split(/[\r\n,;]+/).map((term) => term.trim()).filter(Boolean))];
+}
 const xpFields = [
   { key: 'xpPerMessage', label: 'EXP mỗi tin hợp lệ', min: 1, max: 100, help: 'Từ 1–100 EXP. Chỉ tin vượt qua bộ lọc mới được tính.' },
   { key: 'cooldownSeconds', label: 'Thời gian chờ (giây)', min: 0, max: 3600, help: 'Khoảng cách giữa hai lần nhận EXP của một người.' },
@@ -40,7 +43,8 @@ const xpFields = [
     <section class="level-form-section" aria-labelledby="level-xp-title">
       <div class="level-section-title"><span>02</span><div><h3 id="level-xp-title">Nhịp độ & chống spam</h3><p>Thưởng cho cuộc trò chuyện, không thưởng cho lặp tin.</p></div></div>
       <div class="level-field-grid"><div v-for="field in xpFields" :key="field.key" class="level-field"><label :for="'level-' + field.key">{{ field.label }}</label><input :id="'level-' + field.key" v-model.number="config[field.key]" type="number" step="1" :min="field.min" :max="field.max" :aria-describedby="'level-' + field.key + '-help'" /><small :id="'level-' + field.key + '-help'">{{ field.help }}</small></div></div>
-      <div class="level-field"><label for="level-similarityThreshold">Ngưỡng tương đồng <span>· 0.9 tương đương 90%</span></label><input id="level-similarityThreshold" v-model.number="config.similarityThreshold" type="number" min="0.5" max="1" step="0.01" /><small>Tin đạt hoặc vượt ngưỡng này so với tin cũ không nhận EXP. Lệnh bắt đầu bằng ! cũng không nhận EXP.</small></div>
+      <div class="level-field"><label for="level-similarityThreshold">Ngưỡng tương đồng <span>· tối đa 0.7 (70%)</span></label><input id="level-similarityThreshold" v-model.number="config.similarityThreshold" type="number" min="0.5" max="0.7" step="0.01" /><small>Tin giống từ 70% trở lên luôn không nhận EXP. Hạ ngưỡng để chặn nghiêm hơn; lệnh bắt đầu bằng ! cũng không nhận EXP.</small></div>
+      <div class="level-field-grid"><div class="level-field"><label for="level-profanityXpMultiplier">Tỷ lệ EXP khi có từ bậy</label><input id="level-profanityXpMultiplier" v-model.number="config.profanityXpMultiplier" type="number" min="0.1" max="0.9" step="0.05" /><small>0.5 = nhận 50% EXP bình thường. Nếu EXP mỗi tin là 1, tin có từ bậy sẽ nhận 0 EXP.</small></div><div class="level-field"><label for="level-profanityTerms">Từ/cụm từ cần giảm EXP</label><textarea id="level-profanityTerms" :value="config.profanityTerms.join('\n')" rows="4" placeholder="Mỗi dòng một từ hoặc cụm từ" @input="updateProfanityTerms($event.target.value)"></textarea><small>So khớp không phân biệt hoa thường, dấu tiếng Việt hoặc dấu câu. Chỉ giảm EXP, không xóa tin nhắn.</small></div></div>
     </section>
 
     <section class="level-form-section" aria-labelledby="level-roles-title">
