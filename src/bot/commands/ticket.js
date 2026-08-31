@@ -2,9 +2,10 @@
 // Subcommands: close, priority, tag, assign, note, canned, summary
 import { SlashCommandBuilder, EmbedBuilder, Colors, MessageFlags } from 'discord.js';
 import { lookupTicket, invalidate } from '../utils/ticketCache.js';
-import { getConfig, getStaff } from '../utils/api.js';
+import { getAllClusters, getAllOptions, getConfig, getStaff } from '../utils/api.js';
 import logger from '../utils/logger.js';
 import axios from 'axios';
+import { isConfiguredTicketCategory } from '../utils/ticketCategories.js';
 
 const API_URL = process.env.API_URL || `http://localhost:${process.env.PORT || 3001}`;
 const SECRET = process.env.BOT_API_SECRET;
@@ -245,8 +246,8 @@ async function cmdClose(interaction, ticket) {
     }
 
     if (!parentCategory) return;
-    const isUserManaged = ticket.option?.discordCategoryId === parentCategory.id;
-    if (isUserManaged) return;
+    const [options, clusters] = await Promise.all([getAllOptions().catch(() => []), getAllClusters().catch(() => [])]);
+    if (isConfiguredTicketCategory(parentCategory.id, { options: [ticket.option, ...options], clusters })) return;
 
     const remaining = parentCategory.children.cache.filter((c) => c.id !== channel.id);
     if (remaining.size > 0) return;

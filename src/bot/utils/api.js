@@ -118,6 +118,12 @@ export async function getOptions() {
   }
 }
 
+/** Includes inactive rows for ownership checks such as category cleanup. */
+export async function getAllOptions() {
+  const response = await apiClient.get('/api/options');
+  return response.data.data || [];
+}
+
 
 // ========================
 // Clusters
@@ -136,6 +142,12 @@ export async function getClusters({ active = true, force = false } = {}) {
     logger.warn('Không tải được danh sách cluster:', error.message);
     return clusterCache;
   }
+}
+
+/** Includes inactive rows for ownership checks such as category cleanup. */
+export async function getAllClusters() {
+  const response = await apiClient.get('/api/clusters');
+  return response.data.data || [];
 }
 
 // ========================

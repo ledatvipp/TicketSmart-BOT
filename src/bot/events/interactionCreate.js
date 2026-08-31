@@ -64,7 +64,7 @@ export async function execute(interaction) {
 
     // ---- Modal submit ----
     if (interaction.isModalSubmit()) {
-      if (interaction.customId.startsWith('ticket_form:')) {
+      if (interaction.customId.startsWith('ticket_form:') || interaction.customId.startsWith('ticket_destination_form:')) {
         await handleFormModalSubmit(interaction);
       } else if (interaction.customId.startsWith('ticket_close_modal:')) {
         await handleCloseModalSubmit(interaction);

@@ -5,7 +5,7 @@
 import { ActionRowBuilder, EmbedBuilder, MessageFlags, StringSelectMenuBuilder } from 'discord.js';
 import { getClusters, getConfig, getOptions } from '../utils/api.js';
 import { createTicket } from './ticketManager.js';
-import { showFormModal } from './formModalHandler.js';
+import { showDestinationTicketFormModal, showFormModal } from './formModalHandler.js';
 import { getOptionFormFields, isComplexForm } from '../utils/formFields.js';
 import { startFormWizard } from './formWizardHandler.js';
 import { clusterColor, mergeClusters } from '../../clusters/clusterCatalog.js';
@@ -19,6 +19,19 @@ function scopedClusters(option, clusters) {
 
 export function optionsForCluster(options, clusterKey) {
   return options.filter((option) => scopedClusters(option, [{ key: clusterKey }]).length > 0);
+}
+
+/** Resolve the one configured public ticket type for a destination. */
+export function defaultOptionForCluster(cluster, options) {
+  const eligible = optionsForCluster(options, cluster?.key).filter((option) => option.isActive !== false);
+  if (!eligible.length) return null;
+  const configured = cluster?.defaultOptionId
+    ? eligible.find((option) => String(option.id) === String(cluster.defaultOptionId))
+    : null;
+  if (configured) return configured;
+  return eligible.find((option) => option.name === 'Hỗ Trợ Chung')
+    || eligible.find((option) => String(option.clusterKeys || '*').trim() === '*')
+    || eligible[0];
 }
 
 async function continueTicketFlow(interaction, optionData, options, clusterKey = null) {
@@ -71,17 +84,17 @@ export async function handleTicketTypeSelect(interaction) {
     if (config.ticketRequireCluster !== false && config.ticketClusterSelectEnabled !== false && clusters.length > 1) {
       const menu = new StringSelectMenuBuilder()
         .setCustomId(`ticket_cluster_preselect:${optionId}`)
-        .setPlaceholder('🗺️ Chọn cụm đang gặp vấn đề')
+        .setPlaceholder('🧭 Chọn nơi bạn cần hỗ trợ')
         .addOptions(clusters.slice(0, 25).map((cluster) => ({
           label: cluster.name,
           value: cluster.key,
           emoji: cluster.emoji || '🗺️',
-          description: String(cluster.description || `Hỗ trợ cụm ${cluster.name}`).slice(0, 100),
+          description: String(cluster.description || `Hỗ trợ ${cluster.name}`).slice(0, 100),
         })));
       const embed = new EmbedBuilder()
         .setColor(clusterColor(clusters[0]))
         .setAuthor({ name: 'IS7MC Multi‑Cluster Support' })
-        .setTitle('🗺️ Bạn đang cần hỗ trợ ở cụm nào?')
+        .setTitle('🧭 Bạn cần hỗ trợ tại đâu?')
         .setDescription(`Đã chọn loại ticket **${optionData.emoji || '🎫'} ${optionData.name}**. Chọn đúng cụm để bot mở đúng form, category và đội staff.`)
         .setFooter({ text: 'Bước 2/2 • Chọn một cụm' });
       await interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral });
@@ -100,7 +113,7 @@ export async function handleTicketTypeSelect(interaction) {
   }
 }
 
-/** Initial public-panel step: select cluster, then choose a ticket type scoped to it. */
+/** Initial public-panel step: select destination, then open the standard ticket form. */
 export async function handleTicketClusterStart(interaction) {
   const clusterKey = interaction.values?.[0];
   try {
@@ -110,27 +123,14 @@ export async function handleTicketClusterStart(interaction) {
       return interaction.reply({ content: '❌ Cụm này không còn hoạt động. Vui lòng chọn lại.', flags: MessageFlags.Ephemeral });
     }
 
-    const eligibleOptions = optionsForCluster(options, cluster.key);
-    if (!eligibleOptions.length) {
-      return interaction.reply({ content: `❌ Hiện chưa có loại ticket phù hợp cho cụm **${cluster.name}**.`, flags: MessageFlags.Ephemeral });
+    const option = defaultOptionForCluster(cluster, options);
+    if (!option) {
+      return interaction.reply({
+        content: `❌ Hiện chưa có loại ticket đang hoạt động cho cụm **${cluster.name}**. Staff hãy cấu hình mục này trong Dashboard → Cụm máy chủ.`,
+        flags: MessageFlags.Ephemeral,
+      });
     }
-
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId(`ticket_type_preselect:${cluster.key}`)
-      .setPlaceholder('📋 Chọn vấn đề cần hỗ trợ')
-      .addOptions(eligibleOptions.slice(0, 25).map((option) => ({
-        label: option.name,
-        value: `option_${option.id}`,
-        emoji: option.emoji || '🎫',
-        description: String(option.description || `Hỗ trợ ${option.name}`).slice(0, 100),
-      })));
-    const embed = new EmbedBuilder()
-      .setColor(clusterColor(cluster))
-      .setAuthor({ name: 'IS7MC Multi‑Cluster Support' })
-      .setTitle(`🗺️ Cụm đã chọn: ${cluster.name}`)
-      .setDescription('Chọn vấn đề bạn cần hỗ trợ. Bot sẽ mở đúng form, category và gửi thông báo tới đội staff tương ứng.')
-      .setFooter({ text: 'Bước 2/2 • Chọn vấn đề' });
-    await interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral });
+    await showDestinationTicketFormModal(interaction, option, cluster);
   } catch (error) {
     logger.error('Lỗi chọn cụm trước ticket:', error.message);
     if (!interaction.replied && !interaction.deferred) {

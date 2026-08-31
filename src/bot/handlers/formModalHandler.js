@@ -22,6 +22,34 @@ function safeParseFields(option) {
   } catch { return []; }
 }
 
+/** Public destination flow: keep the form short and never request secrets. */
+export async function showDestinationTicketFormModal(interaction, option, cluster) {
+  const modal = new ModalBuilder()
+    .setCustomId(`ticket_destination_form:${option.id}:${cluster.key}`)
+    .setTitle(`Tạo ${cluster.name}`.slice(0, 45));
+
+  const minecraftName = new TextInputBuilder()
+    .setCustomId('minecraft_name')
+    .setLabel('Tên ingame của bạn')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMaxLength(100)
+    .setPlaceholder('Ví dụ: Rayjacobs');
+  const supportRequest = new TextInputBuilder()
+    .setCustomId('support_request')
+    .setLabel('Bạn cần hỗ trợ gì?')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMaxLength(1000)
+    .setPlaceholder('Ghi ngắn gọn vấn đề. Không gửi mật khẩu, OTP hoặc thông tin nhạy cảm.');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(minecraftName),
+    new ActionRowBuilder().addComponents(supportRequest),
+  );
+  await interaction.showModal(modal);
+}
+
 /**
  * Show modal cho option's form fields.
  * Discord modal: max 5 fields, mỗi field là text input.
@@ -59,6 +87,25 @@ export async function showFormModal(interaction, option, resolvedFields = null, 
  * Handle modal submit: validate, build formData, create ticket
  */
 export async function handleFormModalSubmit(interaction) {
+  const destination = interaction.customId.match(/^ticket_destination_form:([^:]+):([^:]+)$/);
+  if (destination) {
+    const [, optionId, clusterKey] = destination;
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+      const option = (await getOptions()).find((item) => String(item.id) === String(optionId));
+      if (!option) return interaction.editReply({ content: '❌ Loại ticket không còn hoạt động. Vui lòng chọn lại.' });
+      const formData = {
+        minecraft_name: { label: 'Tên ingame của bạn', value: interaction.fields.getTextInputValue('minecraft_name') || '' },
+        support_request: { label: 'Bạn cần hỗ trợ gì?', value: interaction.fields.getTextInputValue('support_request') || '' },
+      };
+      await createTicket(interaction, 'destination', optionId, formData, { clusterKey });
+      logger.info(`User ${interaction.user.username} tạo ticket đích: ${clusterKey}`);
+    } catch (error) {
+      logger.error('Lỗi form ticket destination:', error.message);
+      try { await interaction.editReply({ content: '❌ Lỗi tạo ticket: ' + error.message }); } catch {}
+    }
+    return;
+  }
   const m = interaction.customId.match(/^ticket_form:([^:]+)(?::([^:]+))?(?::([^:]+))?$/);
   if (!m) return;
   const optionId = m[1];

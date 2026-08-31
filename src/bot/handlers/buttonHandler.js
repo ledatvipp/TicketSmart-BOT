@@ -15,12 +15,13 @@ import {
   TextInputStyle,
   MessageFlags,
 } from 'discord.js';
-import apiClient, { claimTicket, closeTicket, getConfig, appendMessagesBulk, getStaff, updateTicketWorkflow } from '../utils/api.js';
+import apiClient, { claimTicket, closeTicket, getAllClusters, getAllOptions, getConfig, appendMessagesBulk, getStaff, updateTicketWorkflow } from '../utils/api.js';
 import { lookupTicket, invalidate } from '../utils/ticketCache.js';
 import { renameTicketChannel, sendCloseLog } from './ticketManager.js';
 import { sendRatingDM } from './ratingHandler.js';
 import logger from '../utils/logger.js';
 import { refreshTicketPanel } from './ticketPanel.js';
+import { isConfiguredTicketCategory } from '../utils/ticketCategories.js';
 
 const CLOSE_PRESETS = {
   success: {
@@ -339,8 +340,8 @@ async function finalizeClose(interaction, { closeType, reason }, options = {}) {
       // Auto-delete category nếu trống — bỏ qua nếu user đã set discordCategoryId
       // (category do họ tự quản lý, không tự xóa)
       if (!parentCategory) return;
-      const isUserManaged = ticket.option?.discordCategoryId === parentCategory.id;
-      if (isUserManaged) return;
+      const [options, clusters] = await Promise.all([getAllOptions().catch(() => []), getAllClusters().catch(() => [])]);
+      if (isConfiguredTicketCategory(parentCategory.id, { options: [ticket.option, ...options], clusters })) return;
 
       // Cache có thể chưa kịp update sau channel.delete() → filter manually
       const remaining = parentCategory.children.cache.filter((c) => c.id !== channel.id);

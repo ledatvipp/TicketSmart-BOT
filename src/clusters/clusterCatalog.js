@@ -43,6 +43,18 @@ export const DEFAULT_CLUSTERS = Object.freeze([
     description: 'Cụm ChunkySMP với thế giới chia chunk và cộng đồng riêng.',
     aiContext: 'Ưu tiên chunk, khu vực cộng đồng, bảo vệ đất và cơ chế riêng của ChunkySMP. Không đánh đồng với SMP thường khi người dùng nói rõ ChunkySMP.',
   },
+  {
+    key: 'ung-ho', name: 'Ủng hộ', emoji: '🎟️', color: '#F1C40F', sortOrder: 80,
+    aliases: ['ung ho', 'ủng hộ', 'nap the', 'nạp thẻ', 'thanh toan', 'thanh toán', 'donate'],
+    description: 'Nạp thẻ, giao dịch, ủng hộ và sản phẩm trên máy chủ.',
+    aiContext: 'Ưu tiên hỗ trợ giao dịch và ủng hộ. Không yêu cầu mật khẩu, OTP hoặc thông tin thanh toán nhạy cảm.',
+  },
+  {
+    key: 'tai-khoan', name: 'Tài khoản', emoji: '🔐', color: '#3498DB', sortOrder: 90,
+    aliases: ['tai khoan', 'tài khoản', 'account', 'dang nhap', 'đăng nhập', 'lien ket', 'liên kết'],
+    description: 'Đăng nhập, liên kết và các vấn đề về tài khoản người chơi.',
+    aiContext: 'Ưu tiên hỗ trợ tài khoản và liên kết. Không yêu cầu mật khẩu, mã OTP hoặc mã xác thực.',
+  },
 ]);
 
 const BY_KEY = new Map(DEFAULT_CLUSTERS.map((cluster) => [cluster.key, cluster]));

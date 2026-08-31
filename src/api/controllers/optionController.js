@@ -102,7 +102,7 @@ async function normalizeOptionData(body, { creating = false, currentId = null } 
   for (const key of ['isActive', 'customEmbedEnabled']) if (body[key] !== undefined) data[key] = cleanBoolean(body[key]);
   const integerFields = {
     sortOrder: [-100000, 100000], autoCloseHours: [0, 8760], autoEscalateMinutes: [0, 43200],
-    slaResponseMinutes: [0, 43200], maxOpenPerUser: [0, 100],
+    slaResponseMinutes: [0, 43200], maxOpenPerUser: [0, 2],
   };
   for (const [key, [min, max]] of Object.entries(integerFields)) {
     if (body[key] !== undefined) data[key] = body[key] === null ? null : cleanInteger(body[key], { min, max });
@@ -178,6 +178,14 @@ export async function deleteOption(req, res, next) {
     const existing = await prisma.option.findUnique({ where: { id }, include: { _count: { select: { tickets: true } } } });
     if (!existing) return res.status(404).json({ success: false, message: 'Không tìm thấy option' });
     if (existing._count.tickets > 0) return res.status(409).json({ success: false, message: 'Option đã có ticket; hãy tắt option thay vì xóa', code: 'OPTION_IN_USE' });
+    const defaultClusterCount = await prisma.cluster.count({ where: { defaultOptionId: id } });
+    if (defaultClusterCount > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `Option đang là loại mặc định của ${defaultClusterCount} cụm; hãy đổi cấu hình cụm trước khi xóa`,
+        code: 'OPTION_IN_CLUSTER_DEFAULT',
+      });
+    }
     const scopedStaff = await prisma.staff.findMany({
       where: { allowedOptions: { contains: id } },
       select: { discordId: true, allowedOptions: true },

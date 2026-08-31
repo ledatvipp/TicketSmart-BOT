@@ -212,9 +212,16 @@ async function syncStaleTickets(client) {
     // --- TIẾN TRÌNH 3: Dọn dẹp danh mục ticket trống (Không chứa kênh con nào và không cấu hình thủ công) ---
     let deletedCategoriesCount = 0;
     try {
-      const optionsResp = await apiClient.get('/api/options').catch(() => null);
+      const [optionsResp, clustersResp] = await Promise.all([
+        apiClient.get('/api/options').catch(() => null),
+        apiClient.get('/api/clusters').catch(() => null),
+      ]);
       const options = optionsResp?.data?.data || [];
-      const userManagedCategoryIds = new Set(options.map(o => o.discordCategoryId).filter(Boolean));
+      const clusters = clustersResp?.data?.data || [];
+      const userManagedCategoryIds = new Set([
+        ...options.map((option) => option.discordCategoryId),
+        ...clusters.map((cluster) => cluster.discordCategoryId),
+      ].filter(Boolean));
 
       // Lấy danh sách tất cả các kênh để lấy categories và kiểm tra children
       const allChannels = await guild.channels.fetch();

@@ -25,6 +25,10 @@ function cleanColor(value) {
   if (!/^#[0-9A-F]{6}$/.test(color)) throw new ValidationError('Màu phải có dạng #RRGGBB');
   return color;
 }
+function optionSupportsCluster(option, clusterKey) {
+  const scope = String(option?.clusterKeys || '*').split(',').map((item) => item.trim()).filter(Boolean);
+  return !scope.length || scope.includes('*') || scope.includes(clusterKey);
+}
 function normalize(body = {}, { partial = false, existing = null } = {}) {
   const data = {};
   if (!partial || body.key !== undefined || body.name !== undefined && !existing) {
@@ -38,11 +42,19 @@ function normalize(body = {}, { partial = false, existing = null } = {}) {
   if (body.aliases !== undefined || !partial) data.aliases = cleanCsv(body.aliases, { maxItems: 50, maxLength: 80 });
   if (body.description !== undefined || !partial) data.description = cleanString(body.description || '', { field: 'description', max: 500, allowEmpty: true, trim: false });
   if (body.discordCategoryId !== undefined) data.discordCategoryId = body.discordCategoryId ? cleanDiscordId(body.discordCategoryId, 'Category ID') : null;
+  if (body.defaultOptionId !== undefined) data.defaultOptionId = body.defaultOptionId ? cleanId(body.defaultOptionId, 'Loại ticket mặc định') : null;
   if (body.supportChannelIds !== undefined || !partial) data.supportChannelIds = cleanCsv(body.supportChannelIds, { maxItems: 100, maxLength: 32, discordIds: true });
   if (body.staffRoleIds !== undefined || !partial) data.staffRoleIds = cleanCsv(body.staffRoleIds, { maxItems: 100, maxLength: 32, discordIds: true });
   if (body.sortOrder !== undefined) data.sortOrder = cleanInteger(body.sortOrder, { field: 'sortOrder', min: -100_000, max: 100_000 });
   if (body.isActive !== undefined) data.isActive = cleanBoolean(body.isActive, { field: 'isActive' });
   return data;
+}
+
+async function validateDefaultOption(defaultOptionId, clusterKey) {
+  if (!defaultOptionId) return;
+  const option = await prisma.option.findUnique({ where: { id: defaultOptionId }, select: { id: true, isActive: true, clusterKeys: true } });
+  if (!option?.isActive) throw new ValidationError('Loại ticket mặc định không tồn tại hoặc đang tắt');
+  if (!optionSupportsCluster(option, clusterKey)) throw new ValidationError('Loại ticket mặc định không áp dụng cho cụm này');
 }
 
 async function withCounts(clusters) {
@@ -62,7 +74,9 @@ export const getClusters = async (req, res, next) => {
 
 export const createCluster = async (req, res, next) => {
   try {
-    const cluster = await prisma.cluster.create({ data: normalize(req.body) });
+    const data = normalize(req.body);
+    await validateDefaultOption(data.defaultOptionId, data.key);
+    const cluster = await prisma.cluster.create({ data });
     await logAudit({ action: 'cluster.create', actorId: req.user.discordId, actorName: req.user.username, metadata: { clusterId: cluster.id, key: cluster.key } });
     emit('cluster:created', cluster);
     res.status(201).json({ success: true, data: cluster });
@@ -80,6 +94,7 @@ export const updateCluster = async (req, res, next) => {
     const data = normalize(req.body, { partial: true, existing });
     delete data.key;
     if (!Object.keys(data).length) throw new ValidationError('Không có thay đổi nào');
+    await validateDefaultOption(data.defaultOptionId, existing.key);
     const cluster = await prisma.cluster.update({ where: { id }, data });
     await logAudit({ action: 'cluster.update', actorId: req.user.discordId, actorName: req.user.username, metadata: { clusterId: id, key: cluster.key, fields: Object.keys(data) } });
     emit('cluster:updated', cluster);

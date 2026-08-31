@@ -1,25 +1,46 @@
 <script setup>
-import { onMounted, ref } from 'vue';
-import { ClustersAPI } from '../api/endpoints';
+import { computed, onMounted, ref } from 'vue';
+import { ClustersAPI, OptionsAPI } from '../api/endpoints';
 import { useToast } from '../stores/toast';
 import StButton from '../components/StButton.vue';
 import Modal from '../components/Modal.vue';
 import Switch from '../components/Switch.vue';
 
 const clusters = ref([]);
+const ticketOptions = ref([]);
 const editing = ref(null);
 const saving = ref(false);
 const toast = useToast();
 
+const availableDefaultOptions = computed(() => {
+  const clusterKey = String(editing.value?.key || '').trim().toLowerCase();
+  if (!clusterKey) return ticketOptions.value;
+
+  return ticketOptions.value.filter((option) => {
+    const scopeKeys = String(option.clusterKeys || '*')
+      .split(',')
+      .map((key) => key.trim().toLowerCase())
+      .filter(Boolean);
+    return scopeKeys.includes('*') || scopeKeys.includes(clusterKey);
+  });
+});
+
+function defaultOptionLabel(cluster) {
+  return ticketOptions.value.find((option) => String(option.id) === String(cluster.defaultOptionId))?.name
+    || 'Tự chọn loại phù hợp';
+}
+
 async function load() {
-  clusters.value = await ClustersAPI.list();
+  const [clusterRows, optionRows] = await Promise.all([ClustersAPI.list(), OptionsAPI.list()]);
+  clusters.value = clusterRows;
+  ticketOptions.value = optionRows.filter((option) => option.isActive);
 }
 onMounted(load);
 
 function openCreate() {
   editing.value = {
     id: null, key: '', name: '', emoji: '🗺️', color: '#5865F2', aliases: '',
-    description: '', discordCategoryId: '', supportChannelIds: '', staffRoleIds: '',
+    description: '', discordCategoryId: '', defaultOptionId: '', supportChannelIds: '', staffRoleIds: '',
     sortOrder: clusters.value.length * 10 + 10, isActive: true,
   };
 }
@@ -94,6 +115,9 @@ async function remove(cluster) {
         <div class="badge badge-gray">📁 {{ cluster.discordCategoryId || 'Chưa gắn category' }}</div>
       </div>
       <div class="muted text-xs" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        Loại ticket mặc định: {{ defaultOptionLabel(cluster) }}
+      </div>
+      <div class="muted text-xs" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
         Từ khóa: {{ cluster.aliases || cluster.name }}
       </div>
       <div class="flex gap-2" style="margin-top: 14px;">
@@ -122,6 +146,14 @@ async function remove(cluster) {
     <div class="grid-2">
       <div class="form-row"><label>Discord Category ID</label><input v-model="editing.discordCategoryId" /></div>
       <div class="form-row"><label>Thứ tự</label><input v-model.number="editing.sortOrder" type="number" /></div>
+    </div>
+    <div class="form-row">
+      <label>Loại ticket mặc định</label>
+      <select v-model="editing.defaultOptionId">
+        <option value="">Tự chọn loại phù hợp</option>
+        <option v-for="option in availableDefaultOptions" :key="option.id" :value="option.id">{{ option.emoji || '🎫' }} {{ option.name }}</option>
+      </select>
+      <div class="muted text-xs" style="margin-top: 6px;">Chỉ hiện loại ticket hỗ trợ cụm này. Để trống để bot tự chọn loại phù hợp an toàn.</div>
     </div>
     <div class="form-row"><label>Support Channel IDs</label><input v-model="editing.supportChannelIds" placeholder="ID1,ID2" /></div>
     <div class="form-row"><label>Staff Role IDs</label><input v-model="editing.staffRoleIds" placeholder="ID1,ID2" /></div>

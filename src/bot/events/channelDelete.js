@@ -5,9 +5,10 @@
 // ========================
 
 import { Events, ChannelType } from 'discord.js';
-import { getTicketByChannel, closeTicket } from '../utils/api.js';
+import { getAllClusters, getAllOptions, getTicketByChannel, closeTicket } from '../utils/api.js';
 import { invalidate } from '../utils/ticketCache.js';
 import logger from '../utils/logger.js';
+import { isConfiguredTicketCategory } from '../utils/ticketCategories.js';
 
 export const name = Events.ChannelDelete;
 export const once = false;
@@ -34,8 +35,8 @@ export async function execute(channel) {
     const parentCategory = channel.parent;
     if (!parentCategory) return;
 
-    const isUserManaged = ticket.option?.discordCategoryId === parentCategory.id;
-    if (isUserManaged) return;
+    const [options, clusters] = await Promise.all([getAllOptions().catch(() => []), getAllClusters().catch(() => [])]);
+    if (isConfiguredTicketCategory(parentCategory.id, { options: [ticket.option, ...options], clusters })) return;
 
     // Lọc bỏ kênh vừa xóa khỏi cache để kiểm tra xem danh mục có trống không
     const remaining = parentCategory.children.cache.filter((c) => c.id !== channel.id);

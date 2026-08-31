@@ -36,10 +36,12 @@ test('Knowledge Base khóa đúng scope cụm', () => {
   assert.equal(articleMatchesCluster({ clusterKeys: '*' }, 'boxpvp'), true);
 });
 
-test('cluster database ghi đè default nhưng vẫn giữ đủ bảy cụm', () => {
+test('cluster database ghi đè default và giữ cả cụm game lẫn dịch vụ ticket', () => {
   const merged = mergeClusters([{ key: 'survival', name: 'Survival Chill', isActive: true, sortOrder: 1 }]);
   assert.equal(merged.find((item) => item.key === 'survival')?.name, 'Survival Chill');
-  assert.equal(merged.length, 7);
+  assert.equal(merged.length, 9);
+  assert.ok(merged.some((item) => item.key === 'ung-ho'));
+  assert.ok(merged.some((item) => item.key === 'tai-khoan'));
 });
 
 test('button tạo ticket mang cluster key xuyên suốt flow', () => {

@@ -51,7 +51,7 @@ onMounted(async () => {
       <div class="showcase-copy">
         <span class="showcase-kicker"><i></i> MULTI-CLUSTER OPERATIONS</span>
         <h1>Một trung tâm.<br><em>Toàn bộ hỗ trợ.</em></h1>
-        <p>Điều hành ticket, Smart AI và bảy cụm máy chủ trong một dashboard sạch, realtime và an toàn.</p>
+        <p>Điều hành ticket, Smart AI, các cụm máy chủ và dịch vụ hỗ trợ trong một dashboard sạch, realtime và an toàn.</p>
       </div>
       <div class="showcase-nodes">
         <span>🌿 SMP</span><span>🏕️ Survival</span><span>☁️ Skyblock</span><span>📦 BoxPvP</span><span>🪷 Tu Tiên</span><span>⚔️ FFA</span><span>🧊 ChunkySMP</span>

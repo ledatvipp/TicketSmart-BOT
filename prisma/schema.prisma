@@ -18,6 +18,7 @@ model Cluster {
   aliases            String   @default("")
   description        String   @default("")
   discordCategoryId  String?
+  defaultOptionId    String?
   supportChannelIds  String   @default("")
   staffRoleIds       String   @default("")
   isActive           Boolean  @default(true)
@@ -677,7 +678,7 @@ model GuildConfig {
   defaultAutoEscalateMinutes Int @default(0) // 0 = tắt
 
   // Anti-spam global
-  globalMaxOpenPerUser  Int @default(3)
+  globalMaxOpenPerUser  Int @default(2)
   ticketCooldownSeconds Int @default(60) // tối thiểu giữa 2 lần tạo
 
   // AI provider (v7.3.2) — OpenRouter is the default real-AI backend.

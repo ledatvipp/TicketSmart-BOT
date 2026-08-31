@@ -363,8 +363,8 @@ function previewFields() {
             <div class="muted text-xs">Vượt thời gian này mà chưa có staff reply → breach + alert.</div>
           </div>
           <div class="form-row">
-            <label>👥 Max tickets mở cùng lúc / user (0 = không giới hạn)</label>
-            <input v-model.number="editing.maxOpenPerUser" type="number" min="0" :disabled="!auth.isAdmin" />
+            <label>👥 Max tickets mở cùng lúc / user (0 = giới hạn chung 2)</label>
+            <input v-model.number="editing.maxOpenPerUser" type="number" min="0" max="2" :disabled="!auth.isAdmin" />
           </div>
         </template>
 

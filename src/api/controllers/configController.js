@@ -300,10 +300,10 @@ function buildInitialTicketSelect(options, clusters, config) {
   if (activeClusters.length) {
     return {
       custom_id: 'ticket_cluster_start',
-      placeholder: '🗺️ Chọn cụm đang gặp vấn đề',
+      placeholder: '🧭 Chọn nơi bạn cần hỗ trợ',
       options: activeClusters.map((cluster) => ({
         label: cluster.name,
-        description: String(cluster.description || `Hỗ trợ cụm ${cluster.name}`).slice(0, 100),
+        description: String(cluster.description || `Hỗ trợ ${cluster.name}`).slice(0, 100),
         value: cluster.key,
         ...(cluster.emoji ? { emoji: { name: cluster.emoji } } : {}),
       })),

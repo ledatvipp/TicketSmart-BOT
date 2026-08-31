@@ -180,7 +180,7 @@ export async function execute(interaction) {
         components: [{
           type: 3,
           custom_id: 'ticket_cluster_start',
-          placeholder: '🗺️ Chọn cụm đang gặp vấn đề',
+          placeholder: '🧭 Chọn nơi bạn cần hỗ trợ',
           options: selectOptions.slice(0, 25),
         }],
       });
@@ -241,7 +241,7 @@ export async function execute(interaction) {
 
       const ticketSelect = new StringSelectMenuBuilder()
         .setCustomId('ticket_cluster_start')
-        .setPlaceholder('🗺️ Chọn cụm đang gặp vấn đề')
+        .setPlaceholder('🧭 Chọn nơi bạn cần hỗ trợ')
         .addOptions(selectOptions.slice(0, 25)); // Discord limit 25 options
 
       const row = new ActionRowBuilder().addComponents(ticketSelect);

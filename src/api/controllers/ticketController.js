@@ -15,6 +15,7 @@ import {
   TICKET_INCLUDE, assignTicketRecord, claimTicketRecord, closeTicketRecord, moveTicketRecord, renderTicketMarkdown, splitDiscordMessage,
 } from '../../services/ticketService.js';
 import { MessageActorType, persistTicketMessage } from '../../services/messageService.js';
+import { getOpenTicketLimit } from '../../services/ticketLimit.js';
 
 async function sendResolutionAndRating(ticket, { reason, staffName }) {
   if (!reason || !ticket.creatorId) return;
@@ -270,9 +271,7 @@ export const createTicket = async (req, res) => {
     }
 
     const config = await prisma.guildConfig.findFirst();
-    const globalMax = Math.max(0, Number(config?.globalMaxOpenPerUser ?? 3));
-    const optionMax = Math.max(0, Number(option?.maxOpenPerUser || 0));
-    const openLimit = optionMax > 0 ? optionMax : globalMax;
+    const openLimit = getOpenTicketLimit(option?.maxOpenPerUser);
     const cooldownSeconds = Math.max(0, Number(config?.ticketCooldownSeconds ?? 60));
 
     const creation = await prisma.$transaction(async (tx) => {
